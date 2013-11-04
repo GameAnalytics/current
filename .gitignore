@@ -1,0 +1,7 @@
+priv
+.eunit
+*~
+deps
+ebin
+test/aws4_testsuite
+*.beam
