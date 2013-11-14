@@ -1,19 +1,85 @@
 -module(current_test).
 -include_lib("eunit/include/eunit.hrl").
 
+-define(TABLE, <<"table">>).
+-define(i2b(I), list_to_binary(integer_to_list(I))).
+
 current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
-      ?_test(list_tables())
+      %% {timeout, 60, ?_test(table_manipulation())},
+      ?_test(batch_write_item())
      ]}.
 
 
-list_tables() ->
-    Response = current:do(list_tables, {[{<<"Limit">>, 10}]}, 5000),
+%%
+%% DYNAMODB
+%%
 
-    error_logger:info_msg("~p~n", [Response]).
+
+table_manipulation() ->
+    current:delete_table({[{<<"TableName">>, ?TABLE}]}),
+    ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
+
+    ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
+                 current:describe_table({[{<<"TableName">>, ?TABLE}]})),
+
+    ok = create_table(?TABLE),
+
+    ?assertEqual(ok, current:wait_for_active(?TABLE, 5000)),
+    ?assertMatch({ok, _}, current:describe_table({[{<<"TableName">>, ?TABLE}]})),
+    %% TODO: list tables and check membership
+    ok.
 
 
+batch_write_item() ->
+    ok = create_table(?TABLE),
+    ok = create_table(<<"other_table">>),
+
+
+    RequestItems = [begin
+                        {[{<<"PutRequest">>,
+                           {[{<<"Item">>,
+                              {[{<<"hash_key">>, {[{<<"N">>,
+                                                    ?i2b(random:uniform(100000))}]}},
+                                {<<"range_key">>, {[{<<"N">>,
+                                                     ?i2b(random:uniform(1000))}]}}
+                               ]}}]}
+                          }]}
+                    end || _ <- lists:seq(1, 30)],
+    Request = {[{<<"RequestItems">>,
+                 {[{?TABLE, RequestItems},
+                  {<<"other_table">>, RequestItems}]}
+                }]},
+
+    ?assertEqual(ok, current:batch_write_item(Request, [])).
+
+
+
+
+%% take_write_batch_test() ->
+%%     ?assertEqual({[{<<"table1">>, lists:seq(1, 25)}],
+%%                   [{<<"table1">>, lists:seq(26, 30)},
+%%                    {<<"table2">>, lists:seq(1, 30)}]},
+%%                  current:take_write_batch(
+%%                    {[{<<"RequestItems">>,
+%%                       {[{<<"table1">>, lists:seq(1, 30)},
+%%                         {<<"table2">>, lists:seq(1, 30)}]}}]})),
+
+%%     ?assertEqual({[{<<"table1">>, [1, 2, 3]},
+%%                    {<<"table2">>, [1, 2, 3]}],
+%%                   []},
+%%                  current:take_write_batch(
+%%                    {[{<<"RequestItems">>,
+%%                       {[{<<"table1">>, [1, 2, 3]},
+%%                         {<<"table2">>, [1, 2, 3]}]}}]})).
+
+
+
+
+%%
+%% SIGNING
+%%
 
 key_derivation_test() ->
     application:set_env(current, secret_access_key,
@@ -55,9 +121,9 @@ post_vanilla_test() ->
 
 
 
-%% request(Name) ->
-%%     {ok, B} = file:read_file(filename:join(["../test", "aws4_testsuite", Name])),
-%%     [RequestLine | Rest] = string:tokens(binary_to_list(B), "\r\n"),
+%%
+%% HELPERS
+%%
 
 creq(Name) ->
     {ok, B} = file:read_file(
@@ -74,6 +140,7 @@ authz(Name) ->
     {ok, B} = file:read_file(
                 filename:join(["../test", "aws4_testsuite", Name ++ ".authz"])),
     binary_to_list(binary:replace(B, <<"\r\n">>, <<"\n">>, [global])).
+
 
 
 
@@ -98,6 +165,29 @@ teardown(_) ->
     application:stop(current).
 
 
+create_table(Name) ->
+    AttrDefs = [{[{<<"AttributeName">>, <<"hash_key">>},
+                  {<<"AttributeType">>, <<"N">>}]},
+                {[{<<"AttributeName">>, <<"range_key">>},
+                  {<<"AttributeType">>, <<"N">>}]}],
+    KeySchema = [{[{<<"AttributeName">>, <<"hash_key">>},
+                   {<<"KeyType">>, <<"HASH">>}]},
+                 {[{<<"AttributeName">>, <<"range_key">>},
+                   {<<"KeyType">>, <<"RANGE">>}]}],
 
+    R = {[{<<"AttributeDefinitions">>, AttrDefs},
+          {<<"KeySchema">>, KeySchema},
+          {<<"ProvisionedThroughput">>,
+           {[{<<"ReadCapacityUnits">>, 10},
+             {<<"WriteCapacityUnits">>, 1}]}},
+          {<<"TableName">>, Name}]},
 
+    case current:describe_table({[{<<"TableName">>, Name}]}) of
+        {error, {<<"ResourceNotFoundException">>, _}} ->
+            ?assertMatch({ok, _},
+                         current:create_table(R, [{timeout, 5000}, {retries, 3}])),
+            ok = current:wait_for_active(?TABLE, 5000);
+        {ok, _} ->
+            ok
+    end.
 
