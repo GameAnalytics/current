@@ -8,7 +8,9 @@ current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
       %% {timeout, 60, ?_test(table_manipulation())},
-      ?_test(batch_write_item())
+      ?_test(batch_write_item()),
+      ?_test(scan()),
+      ?_test(q())
      ]}.
 
 
@@ -56,24 +58,69 @@ batch_write_item() ->
 
 
 
+scan() ->
+    ok = create_table(?TABLE),
+    RequestItems = [begin
+                        {[{<<"PutRequest">>,
+                           {[{<<"Item">>,
+                              {[{<<"hash_key">>, {[{<<"N">>, <<"1">>}]}},
+                                {<<"range_key">>, {[{<<"N">>, ?i2b(I)}]}},
+                                {<<"attribute">>, {[{<<"S">>, <<"foo">>}]}}
+                               ]}}]}
+                          }]}
+                    end || I <- lists:seq(1, 100)],
+    Request = {[{<<"RequestItems">>,
+                 {[{?TABLE, RequestItems}]}
+                }]},
 
-%% take_write_batch_test() ->
-%%     ?assertEqual({[{<<"table1">>, lists:seq(1, 25)}],
-%%                   [{<<"table1">>, lists:seq(26, 30)},
-%%                    {<<"table2">>, lists:seq(1, 30)}]},
-%%                  current:take_write_batch(
-%%                    {[{<<"RequestItems">>,
-%%                       {[{<<"table1">>, lists:seq(1, 30)},
-%%                         {<<"table2">>, lists:seq(1, 30)}]}}]})),
+    ok = current:batch_write_item(Request, []),
 
-%%     ?assertEqual({[{<<"table1">>, [1, 2, 3]},
-%%                    {<<"table2">>, [1, 2, 3]}],
-%%                   []},
-%%                  current:take_write_batch(
-%%                    {[{<<"RequestItems">>,
-%%                       {[{<<"table1">>, [1, 2, 3]},
-%%                         {<<"table2">>, [1, 2, 3]}]}}]})).
+    Q = {[{<<"TableName">>, ?TABLE}]},
 
+    ?assertMatch({ok, L} when is_list(L), current:scan(Q, [])).
+
+
+
+take_write_batch_test() ->
+    ?assertEqual({[{<<"table1">>, lists:seq(1, 25)}],
+                  [{<<"table1">>, lists:seq(26, 30)},
+                   {<<"table2">>, lists:seq(1, 30)}]},
+                 current:take_write_batch(
+                   {[{<<"table1">>, lists:seq(1, 30)},
+                     {<<"table2">>, lists:seq(1, 30)}]})),
+
+    ?assertEqual({[{<<"table1">>, [1, 2, 3]},
+                   {<<"table2">>, [1, 2, 3]}],
+                  []},
+                 current:take_write_batch(
+                   {[{<<"table1">>, [1, 2, 3]},
+                     {<<"table2">>, [1, 2, 3]}]})).
+
+
+q() ->
+    ok = create_table(?TABLE),
+    ok = clear_table(?TABLE),
+
+    Items = [{[{<<"hash_key">>, {[{<<"N">>, <<"1">>}]}},
+               {<<"range_key">>, {[{<<"N">>, ?i2b(I)}]}}]}
+             || I <- lists:seq(1, 100)],
+
+    RequestItems = [begin
+                        {[{<<"PutRequest">>, {[{<<"Item">>, Item}]}}]}
+                    end || Item <- Items],
+    Request = {[{<<"RequestItems">>, {[{?TABLE, RequestItems}]}}]},
+
+    ok = current:batch_write_item(Request, []),
+
+    Q = {[{<<"TableName">>, ?TABLE},
+          {<<"KeyConditions">>,
+           {[{<<"hash_key">>,
+              {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
+                {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
+          {<<"Limit">>, 10}]},
+
+    {ok, ResultItems} = current:q(Q, []),
+    ?assertEqual(lists:sort(Items), lists:sort(ResultItems)).
 
 
 
@@ -191,3 +238,17 @@ create_table(Name) ->
             ok
     end.
 
+clear_table(Name) ->
+    case current:scan({[{<<"TableName">>, Name},
+                        {<<"AttributesToGet">>, [<<"hash_key">>, <<"range_key">>]}]},
+                      []) of
+        {ok, Items} ->
+
+            RequestItems = [{[{<<"DeleteRequest">>,
+                               {[{<<"Key">>, Item}]}}]} || Item <- Items],
+            Request = {[{<<"RequestItems">>,
+                         {[{Name, RequestItems}]}},
+                        {<<"AttributesToGet">>, [<<"hash_key">>, <<"range_key">>]}
+                       ]},
+            ok = current:batch_write_item(Request, [])
+    end.

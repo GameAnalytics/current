@@ -44,28 +44,31 @@ wait_for_delete(Table, Timeout) ->
 %%
 
 
-create_table(Request, Opts) ->
-    retry(create_table, Request, Opts).
+create_table(Request, Opts)     -> retry(create_table, Request, Opts).
 
-delete_table(Request) -> delete_table(Request, []).
-delete_table(Request, Opts) ->
-    retry(delete_table, Request, Opts).
+delete_table(Request)           -> delete_table(Request, []).
+delete_table(Request, Opts)     -> retry(delete_table, Request, Opts).
 
-describe_table(Request) -> describe_table(Request, []).
-describe_table(Request, Opts) ->
-    retry(describe_table, Request, Opts).
+describe_table(Request)         -> describe_table(Request, []).
+describe_table(Request, Opts)   -> retry(describe_table, Request, Opts).
 
 
-batch_write_item({UserRequest}, Opts) ->
-    do_batch_write_item({UserRequest}, Opts).
+batch_write_item(Request, Opts) -> do_batch_write_item(Request, Opts).
+
+q(Request, Opts)                -> do_query(Request, Opts).
+scan(Request, Opts)             -> do_scan(Request, Opts).
+
+%%
+%% BATCH GET AND WRITE
+%%
 
 
-do_batch_write_item(Request, Opts) ->
-    {Batch, Rest} = take_write_batch(Request),
+do_batch_write_item({Request}, Opts) ->
+    {value, {<<"RequestItems">>, RequestItems}, CleanRequest} =
+        lists:keytake(<<"RequestItems">>, 1, Request),
 
-    BatchRequest = {[{<<"ReturnConsumedCapacity">>, <<"TOTAL">>},
-                     {<<"ReturnItemCollectionMetrics">>, <<"NONE">>},
-                     {<<"RequestItems">>, {Batch}}]},
+    {Batch, Rest} = take_write_batch(RequestItems),
+    BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
 
     case retry(batch_write_item, BatchRequest, Opts) of
         {ok, {Result}} ->
@@ -87,23 +90,9 @@ do_batch_write_item(Request, Opts) ->
     end.
 
 
-take_write_batch({[{<<"RequestItems">>, {RequestItems}}]}) ->
+take_write_batch({RequestItems}) ->
     %% TODO: Validate item size
     %% TODO: Chunk on 1MB request size
-    %% try
-    %%     {lists:foldl(fun ({Table, Requests}, Acc) ->
-    %%                          case take_batch(25, Requests, []) of
-    %%                              {Batch, []} ->
-    %%                                  [{Table, Batch}| Acc];
-    %%                              {Batch, Rest} ->
-    %%                                  throw({batch, {Table, Batch}, [{Table, Rest} | Acc]})
-    %%                          end
-    %%                  end, [], RequestItems), []}
-    %% catch
-    %%     {batch, Batch, Rest} ->
-    %%         {Batch, Rest}
-    %% end.
-
     do_take_write_batch(RequestItems, 0, []).
 
 do_take_write_batch(Remaining, 25, Acc) ->
@@ -131,22 +120,89 @@ take_batch(_, [H], Acc)     -> {lists:reverse([H | Acc]), []};
 take_batch(N, [H | T], Acc) -> take_batch(N-1, T, [H | Acc]).
 
 
-%% retry(F, Opts) ->
-%%     retry(F, 0, os:timestamp(), timeout(Opts)).
 
-%% retry(F, Retries, RequestStart, Timeout) ->
-%%     %% Assume requests take the same amount of time....
-%%     FStart = os:timestamp(),
-%%     try F() of
-%%         {ok, Result} ->
-%%             {ok, Result};
 
-%%         {error, timeout} ->
 
-%%             %% Do we have time to try again?
-%%             FDelta = timer:now_diff(os:timestamp(), FStart),
-%%             case timer:now_diff(os:timestamp(), Start) < Timeout
+%%
+%% QUERY
+%%
 
+do_query(Request, Opts) ->
+    do_query(Request, [], Opts).
+
+do_query({UserRequest}, Acc, Opts) ->
+    ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
+                            undefined ->
+                                [];
+                            StartKey ->
+                                [{<<"ExclusiveStartKey">>, StartKey}]
+                        end,
+
+    Request = {ExclusiveStartKey ++ UserRequest},
+
+    case retry('query', Request, Opts) of
+        {ok, {Response}} ->
+            Items = proplists:get_value(<<"Items">>, Response),
+            case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
+                undefined ->
+                    {ok, Items ++ Acc};
+                LastEvaluatedKey ->
+                    NextRequest = {lists:keystore(
+                                     <<"ExclusiveStartKey">>, 1,
+                                     UserRequest,
+                                     {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
+                    do_query(NextRequest, Items ++ Acc, Opts)
+            end
+    end.
+
+
+
+
+
+
+
+%%
+%% SCAN
+%%
+
+
+do_scan(Request, Opts) ->
+    do_scan(Request, [], Opts).
+
+do_scan({UserRequest}, Acc, Opts) ->
+    ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
+                            undefined ->
+                                [];
+                            StartKey ->
+                                [{<<"ExclusiveStartKey">>, StartKey}]
+                        end,
+
+    Request = {ExclusiveStartKey ++ UserRequest},
+
+    case retry(scan, Request, Opts) of
+        {ok, {Response}} ->
+            Items = proplists:get_value(<<"Items">>, Response),
+            case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
+                undefined ->
+                    {ok, Items ++ Acc};
+                LastEvaluatedKey ->
+                    NextRequest = {lists:keystore(
+                                     <<"ExclusiveStartKey">>, 1,
+                                     UserRequest,
+                                     {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
+                    do_scan(NextRequest, Items ++ Acc, Opts)
+            end
+    end.
+
+
+
+
+
+
+
+%%
+%% INTERNALS
+%%
 
 retry(Op, Request, Opts) ->
     retry(Op, Request, 0, Opts).
@@ -155,10 +211,11 @@ retry(Op, Request, Retries, Opts) ->
     case do(Op, Request, timeout(Opts)) of
         {ok, _} = Result ->
             Result;
-        {error, {server, _}} = Error ->
-            lager:info("server error: ~p", [Error]),
-            Sleep = math:pow(2, Retries) * 50,
-            lager:info("sleep: ~p", [Sleep]),
+
+        {error, {<<"ProvisionedThroughputExceededException">>, _}} = Error->
+            error_logger:info_msg("server error: ~p~n", [Error]),
+            Sleep = trunc(math:pow(2, Retries) * 50),
+            error_logger:info_msg("sleep: ~p~n", [Sleep]),
             timer:sleep(Sleep),
             case Retries+1 =:= retries(Opts) of
                 true ->
@@ -173,8 +230,11 @@ retry(Op, Request, Retries, Opts) ->
 
 
 
-do(Operation, Request, Timeout) ->
+do(Operation, {UserRequest}, Timeout) ->
     Now = edatetime:now2ts(),
+
+    Request = {lists:keystore(<<"ReturnConsumedCapacity">>, 1, UserRequest,
+                              {<<"ReturnConsumedCapacity">>, <<"TOTAL">>})},
 
     Body = jiffy:encode(Request),
 
@@ -288,12 +348,14 @@ hexdigest(Body) ->
 
 
 
-target(batch_write_item)   -> "DynamoDB_20120810.BatchWriteItem";
-target(create_table)   -> "DynamoDB_20120810.CreateTable";
-target(delete_table)   -> "DynamoDB_20120810.DeleteTable";
-target(describe_table) -> "DynamoDB_20120810.DescribeTable";
-target(list_tables)    -> "DynamoDB_20120810.ListTables";
-target(Target)         -> throw({unknown_target, Target}).
+target(batch_write_item) -> "DynamoDB_20120810.BatchWriteItem";
+target(create_table)     -> "DynamoDB_20120810.CreateTable";
+target(delete_table)     -> "DynamoDB_20120810.DeleteTable";
+target(describe_table)   -> "DynamoDB_20120810.DescribeTable";
+target(list_tables)      -> "DynamoDB_20120810.ListTables";
+target('query')          -> "DynamoDB_20120810.Query";
+target(scan)             -> "DynamoDB_20120810.Scan";
+target(Target)           -> throw({unknown_target, Target}).
 
 
 %%
