@@ -4,6 +4,37 @@
 
 
 %%
+%% LOW-LEVEL API
+%%
+
+batch_write_item(Request, Opts) -> do_batch_write_item(Request, Opts).
+
+create_table(Request, Opts)     -> retry(create_table, Request, Opts).
+
+delete_table(Request)           -> delete_table(Request, []).
+delete_table(Request, Opts)     -> retry(delete_table, Request, Opts).
+
+describe_table(Request)         -> describe_table(Request, []).
+describe_table(Request, Opts)   -> retry(describe_table, Request, Opts).
+
+get_item(Request)               -> get_item(Request, []).
+get_item(Request, Opts)         -> retry(get_item, Request, Opts).
+
+update_item(Request)            -> update_item(Request, []).
+update_item(Request, Opts)      -> retry(update_item, Request, Opts).
+
+delete_item(Request)            -> delete_item(Request, []).
+delete_item(Request, Opts)      -> retry(delete_item, Request, Opts).
+
+put_item(Request)               -> put_item(Request, []).
+put_item(Request, Opts)         -> retry(put_item, Request, Opts).
+
+scan(Request, Opts)             -> do_scan(Request, Opts).
+q(Request, Opts)                -> do_query(Request, Opts).
+
+
+
+%%
 %% HIGH-LEVEL HELPERS
 %%
 
@@ -37,26 +68,12 @@ wait_for_delete(Table, Timeout) ->
     end.
 
 
+%% ============================================================================
+%% IMPLEMENTATION
+%% ============================================================================
 
 
-%%
-%% LOW-LEVEL API
-%%
 
-
-create_table(Request, Opts)     -> retry(create_table, Request, Opts).
-
-delete_table(Request)           -> delete_table(Request, []).
-delete_table(Request, Opts)     -> retry(delete_table, Request, Opts).
-
-describe_table(Request)         -> describe_table(Request, []).
-describe_table(Request, Opts)   -> retry(describe_table, Request, Opts).
-
-
-batch_write_item(Request, Opts) -> do_batch_write_item(Request, Opts).
-
-q(Request, Opts)                -> do_query(Request, Opts).
-scan(Request, Opts)             -> do_scan(Request, Opts).
 
 %%
 %% BATCH GET AND WRITE
@@ -116,6 +133,7 @@ do_take_write_batch([{Table, Requests} | RemainingTables], N, Acc) ->
 
 
 take_batch(0, T, Acc)       -> {lists:reverse(Acc), T};
+take_batch(_, [], Acc)      -> {[], Acc};
 take_batch(_, [H], Acc)     -> {lists:reverse([H | Acc]), []};
 take_batch(N, [H | T], Acc) -> take_batch(N-1, T, [H | Acc]).
 
@@ -205,27 +223,40 @@ do_scan({UserRequest}, Acc, Opts) ->
 %%
 
 retry(Op, Request, Opts) ->
-    retry(Op, Request, 0, Opts).
+    case proplists:is_defined(no_retry, Opts) of
+        true ->
+            do(Op, Request, timeout(Opts));
+        false ->
+            retry(Op, Request, 0, os:timestamp(), Opts)
+    end.
 
-retry(Op, Request, Retries, Opts) ->
+retry(Op, Request, Retries, Start, Opts) ->
     case do(Op, Request, timeout(Opts)) of
         {ok, _} = Result ->
             Result;
 
-        {error, {<<"ProvisionedThroughputExceededException">>, _}} = Error->
-            error_logger:info_msg("server error: ~p~n", [Error]),
-            Sleep = trunc(math:pow(2, Retries) * 50),
-            error_logger:info_msg("sleep: ~p~n", [Sleep]),
-            timer:sleep(Sleep),
-            case Retries+1 =:= retries(Opts) of
+        {error, Reason} = Error ->
+            Retry = case Reason of
+                        {<<"ProvisionedThroughputExceededException">>, _} ->
+                            true;
+                        {<<"ResourceNotFoundException">>, _} ->
+                            false;
+                        timeout ->
+                            true
+                    end,
+            case Retry of
                 true ->
-                    {error, max_retries};
+                    case Retries+1 =:= retries(Opts) orelse
+                        timer:now_diff(os:timestamp(), Start) / 1000 > timeout(Opts) of
+                        true ->
+                            {error, max_retries};
+                        false ->
+                            timer:sleep(trunc(math:pow(2, Retries) * 50)),
+                            retry(Op, Request, Retries+1, Start, Opts)
+                    end;
                 false ->
-                    retry(Op, Request, Retries+1, Opts)
-            end;
-
-        {error, {_Exception, _Message}} = Error->
-            Error
+                    Error
+            end
     end.
 
 
@@ -274,7 +305,10 @@ do(Operation, {UserRequest}, Timeout) ->
 
         {ok, {{Code, _}, _, ResponseBody}}
           when 500 =< Code andalso Code =< 599 ->
-            {error, {server, jiffy:decode(ResponseBody)}}
+            {error, {server, jiffy:decode(ResponseBody)}};
+
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 
@@ -355,6 +389,11 @@ target(describe_table)   -> "DynamoDB_20120810.DescribeTable";
 target(list_tables)      -> "DynamoDB_20120810.ListTables";
 target('query')          -> "DynamoDB_20120810.Query";
 target(scan)             -> "DynamoDB_20120810.Scan";
+target(get_item)         -> "DynamoDB_20120810.GetItem";
+target(update_item)      -> "DynamoDB_20120810.UpdateItem";
+target(put_item)         -> "DynamoDB_20120810.PutItem";
+target(delete_item)      -> "DynamoDB_20120810.DeleteItem";
+
 target(Target)           -> throw({unknown_target, Target}).
 
 

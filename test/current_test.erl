@@ -1,16 +1,18 @@
 -module(current_test).
 -include_lib("eunit/include/eunit.hrl").
 
--define(TABLE, <<"table">>).
+-define(TABLE, <<"current_test_table">>).
 -define(i2b(I), list_to_binary(integer_to_list(I))).
 
 current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
-      %% {timeout, 60, ?_test(table_manipulation())},
+      {timeout, 60, ?_test(table_manipulation())},
       ?_test(batch_write_item()),
       ?_test(scan()),
-      ?_test(q())
+      ?_test(q()),
+      ?_test(get_put_update_delete()),
+      ?_test(retry_with_timeout())
      ]}.
 
 
@@ -36,7 +38,7 @@ table_manipulation() ->
 
 batch_write_item() ->
     ok = create_table(?TABLE),
-    ok = create_table(<<"other_table">>),
+    ok = create_table(<<"current_test_other_table">>),
 
 
     RequestItems = [begin
@@ -51,7 +53,7 @@ batch_write_item() ->
                     end || _ <- lists:seq(1, 30)],
     Request = {[{<<"RequestItems">>,
                  {[{?TABLE, RequestItems},
-                  {<<"other_table">>, RequestItems}]}
+                  {<<"current_test_other_table">>, RequestItems}]}
                 }]},
 
     ?assertEqual(ok, current:batch_write_item(Request, [])).
@@ -121,6 +123,72 @@ q() ->
 
     {ok, ResultItems} = current:q(Q, []),
     ?assertEqual(lists:sort(Items), lists:sort(ResultItems)).
+
+
+get_put_update_delete() ->
+    ok = create_table(?TABLE),
+    ok = clear_table(?TABLE),
+
+    Key = {[{<<"hash_key">>, {[{<<"N">>, <<"1">>}]}},
+            {<<"range_key">>, {[{<<"N">>, <<"1">>}]}}]},
+
+    Item = {[{<<"range_key">>, {[{<<"N">>, <<"1">>}]}},
+             {<<"hash_key">>, {[{<<"N">>, <<"1">>}]}},
+             {<<"attribute">>, {[{<<"SS">>, [<<"foo">>]}]}}]},
+
+    {ok, {NoItem}} = current:get_item({[{<<"TableName">>, ?TABLE},
+                                        {<<"Key">>, Key}]}),
+    ?assertNot(proplists:is_defined(<<"Item">>, NoItem)),
+
+
+    ?assertMatch({ok, _}, current:put_item({[{<<"TableName">>, ?TABLE},
+                                             {<<"Item">>, Item}]})),
+
+    {ok, {WithItem}} = current:get_item({[{<<"TableName">>, ?TABLE},
+                                        {<<"Key">>, Key}]}),
+    ?assertEqual(Item, proplists:get_value(<<"Item">>, WithItem)),
+
+    {ok, _} = current:update_item(
+                {[{<<"TableName">>, ?TABLE},
+                  {<<"AttributeUpdates">>,
+                   {[{<<"attribute">>, {[{<<"Action">>, <<"ADD">>},
+                                         {<<"Value">>, {[{<<"SS">>, [<<"bar">>]}]}}
+                                        ]}}]}},
+                  {<<"Key">>, Key}]}),
+
+    {ok, {WithUpdate}} = current:get_item({[{<<"TableName">>, ?TABLE},
+                                             {<<"Key">>, Key}]}),
+    {UpdatedItem} = proplists:get_value(<<"Item">>, WithUpdate),
+    ?assertEqual({[{<<"SS">>, [<<"bar">>, <<"foo">>]}]},
+                 proplists:get_value(<<"attribute">>, UpdatedItem)),
+
+
+    ?assertMatch({ok, _}, current:delete_item({[{<<"TableName">>, ?TABLE},
+                                                {<<"Key">>, Key}]})),
+
+    {ok, {NoItemAgain}} = current:get_item({[{<<"TableName">>, ?TABLE},
+                                             {<<"Key">>, Key}]}),
+    ?assertNot(proplists:is_defined(<<"Item">>, NoItemAgain)).
+
+
+retry_with_timeout() ->
+    ok = create_table(?TABLE),
+    ok = clear_table(?TABLE),
+
+    meck:new(lhttpc, [passthrough]),
+    meck:expect(lhttpc, request, fun (_, _, _, _, _) ->
+                                         timer:sleep(100),
+                                         {error, timeout}
+                                 end),
+
+    Start = os:timestamp(),
+    ?assertEqual({error, max_retries},
+                 current:describe_table({[{<<"TableName">>, ?TABLE}]},
+                                        [{timeout, 300}, {retries, 10}])),
+    ?assert(timer:now_diff(os:timestamp(), Start) / 1000 > 300),
+    ?assert(timer:now_diff(os:timestamp(), Start) / 1000 < 600),
+
+    meck:unload(lhttpc).
 
 
 
@@ -226,7 +294,7 @@ create_table(Name) ->
           {<<"KeySchema">>, KeySchema},
           {<<"ProvisionedThroughput">>,
            {[{<<"ReadCapacityUnits">>, 10},
-             {<<"WriteCapacityUnits">>, 1}]}},
+             {<<"WriteCapacityUnits">>, 5}]}},
           {<<"TableName">>, Name}]},
 
     case current:describe_table({[{<<"TableName">>, Name}]}) of
@@ -242,8 +310,9 @@ clear_table(Name) ->
     case current:scan({[{<<"TableName">>, Name},
                         {<<"AttributesToGet">>, [<<"hash_key">>, <<"range_key">>]}]},
                       []) of
+        {ok, []} ->
+            ok;
         {ok, Items} ->
-
             RequestItems = [{[{<<"DeleteRequest">>,
                                {[{<<"Key">>, Item}]}}]} || Item <- Items],
             Request = {[{<<"RequestItems">>,
