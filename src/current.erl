@@ -7,30 +7,28 @@
 %% LOW-LEVEL API
 %%
 
+
+batch_get_item(Request, Opts)   -> do_batch_get_item(Request, Opts).
 batch_write_item(Request, Opts) -> do_batch_write_item(Request, Opts).
-
 create_table(Request, Opts)     -> retry(create_table, Request, Opts).
-
-delete_table(Request)           -> delete_table(Request, []).
-delete_table(Request, Opts)     -> retry(delete_table, Request, Opts).
-
-describe_table(Request)         -> describe_table(Request, []).
-describe_table(Request, Opts)   -> retry(describe_table, Request, Opts).
-
-get_item(Request)               -> get_item(Request, []).
-get_item(Request, Opts)         -> retry(get_item, Request, Opts).
-
-update_item(Request)            -> update_item(Request, []).
-update_item(Request, Opts)      -> retry(update_item, Request, Opts).
-
-delete_item(Request)            -> delete_item(Request, []).
+delete_item(Request)            -> retry(delete_item, Request, []).
 delete_item(Request, Opts)      -> retry(delete_item, Request, Opts).
-
-put_item(Request)               -> put_item(Request, []).
+delete_table(Request)           -> retry(delete_table, Request, []).
+delete_table(Request, Opts)     -> retry(delete_table, Request, Opts).
+describe_table(Request)         -> retry(describe_table, Request, []).
+describe_table(Request, Opts)   -> retry(describe_table, Request, Opts).
+get_item(Request)               -> retry(get_item, Request, []).
+get_item(Request, Opts)         -> retry(get_item, Request, Opts).
+list_tables(Request)            -> retry(list_tables, Request, []).
+list_tables(Request, Opts)      -> retry(list_tables, Request, Opts).
+put_item(Request)               -> retry(put_item, Request, []).
 put_item(Request, Opts)         -> retry(put_item, Request, Opts).
-
-scan(Request, Opts)             -> do_scan(Request, Opts).
 q(Request, Opts)                -> do_query(Request, Opts).
+scan(Request, Opts)             -> do_scan(Request, Opts).
+update_item(Request)            -> retry(update_item, Request, []).
+update_item(Request, Opts)      -> retry(update_item, Request, Opts).
+update_table(Request)           -> retry(update_table, Request, []).
+update_table(Request, Opts)     -> retry(update_table, Request, Opts).
 
 
 
@@ -80,11 +78,47 @@ wait_for_delete(Table, Timeout) ->
 %%
 
 
+do_batch_get_item(Request, Opts) ->
+    do_batch_get_item({Request}, [], Opts).
+
+do_batch_get_item({Request}, Acc, Opts) ->
+
+    {value, {<<"RequestItems">>, RequestItems}, CleanRequest} =
+        lists:keytake(<<"RequestItems">>, 1, Request),
+
+    {Batch, Rest} = take_batch(RequestItems, 100),
+    BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
+
+    case retry(batch_write_item, BatchRequest, Opts) of
+        {ok, {Result}} ->
+            {Responses} = proplists:get_value(<<"Responses">>, Result),
+            NewAcc = Responses ++ Acc,
+
+            {Unprocessed} = proplists:get_value(<<"UnprocessedKeys">>, Result),
+            case Unprocessed =:= [] andalso Rest =:= [] of
+                true ->
+                    NewAcc;
+                false ->
+                    Remaining = orddict:merge(fun (_, Left, Right) ->
+                                                      Left ++ Right
+                                              end,
+                                              orddict:from_list(Unprocessed),
+                                              orddict:from_list(Rest)),
+
+                    do_batch_get_item({[{<<"RequestItems">>, {Remaining}}]},
+                                      NewAcc, Opts)
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+
 do_batch_write_item({Request}, Opts) ->
     {value, {<<"RequestItems">>, RequestItems}, CleanRequest} =
         lists:keytake(<<"RequestItems">>, 1, Request),
 
-    {Batch, Rest} = take_write_batch(RequestItems),
+    {Batch, Rest} = take_batch(RequestItems, 25),
+    error_logger:info_msg("~p~n", [Batch]),
     BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
 
     case retry(batch_write_item, BatchRequest, Opts) of
@@ -107,35 +141,37 @@ do_batch_write_item({Request}, Opts) ->
     end.
 
 
-take_write_batch({RequestItems}) ->
+take_batch({RequestItems}, MaxItems) ->
     %% TODO: Validate item size
     %% TODO: Chunk on 1MB request size
-    do_take_write_batch(RequestItems, 0, []).
+    do_take_batch(RequestItems, 0, MaxItems, []).
 
-do_take_write_batch(Remaining, 25, Acc) ->
+do_take_batch(Remaining, MaxItems, MaxItems, Acc) ->
     {lists:reverse(Acc), Remaining};
 
-do_take_write_batch([], _, Acc) ->
+do_take_batch([], _, _, Acc) ->
     {lists:reverse(Acc), []};
 
-do_take_write_batch([{Table, Requests} | RemainingTables], N, Acc) ->
-    case take_batch(25, Requests, []) of
+do_take_batch([{Table, Requests} | RemainingTables], N, MaxItems, Acc) ->
+    case split_batch(MaxItems, Requests, []) of
         {Batch, []} ->
-            do_take_write_batch(RemainingTables,
-                                N + length(Batch),
-                                [{Table, Batch} | Acc]);
+            do_take_batch(RemainingTables,
+                          N + length(Batch),
+                          MaxItems,
+                          [{Table, Batch} | Acc]);
         {Batch, Rest} ->
-            do_take_write_batch([{Table, Rest} | RemainingTables],
-                                N + length(Batch),
-                                [{Table, Batch} | Acc])
+            do_take_batch([{Table, Rest} | RemainingTables],
+                          N + length(Batch),
+                          MaxItems,
+                          [{Table, Batch} | Acc])
     end.
 
 
 
-take_batch(0, T, Acc)       -> {lists:reverse(Acc), T};
-take_batch(_, [], Acc)      -> {[], Acc};
-take_batch(_, [H], Acc)     -> {lists:reverse([H | Acc]), []};
-take_batch(N, [H | T], Acc) -> take_batch(N-1, T, [H | Acc]).
+split_batch(0, T, Acc)       -> {lists:reverse(Acc), T};
+split_batch(_, [], Acc)      -> {[], Acc};
+split_batch(_, [H], Acc)     -> {lists:reverse([H | Acc]), []};
+split_batch(N, [H | T], Acc) -> split_batch(N-1, T, [H | Acc]).
 
 
 
@@ -231,18 +267,26 @@ retry(Op, Request, Opts) ->
     end.
 
 retry(Op, Request, Retries, Start, Opts) ->
+    RequestStart = os:timestamp(),
     case do(Op, Request, timeout(Opts)) of
-        {ok, _} = Result ->
-            Result;
+        {ok, Response} ->
+
+            case proplists:get_value(<<"ConsumedCapacity">>,
+                                     element(1, Response)) of
+                undefined -> ok;
+                Capacity  -> catch (callback_mod()):request_complete(
+                                     Op, RequestStart, Capacity)
+            end,
+
+            {ok, Response};
 
         {error, Reason} = Error ->
             Retry = case Reason of
-                        {<<"ProvisionedThroughputExceededException">>, _} ->
-                            true;
-                        {<<"ResourceNotFoundException">>, _} ->
-                            false;
-                        timeout ->
-                            true
+                        {<<"ProvisionedThroughputExceededException">>, _} -> true;
+                        {<<"ResourceNotFoundException">>, _}              -> false;
+                        {<<"ResourceInUseException">>, _}                 -> true;
+                        {<<"ValidationException">>, _}                    -> false;
+                        timeout                                           -> true
                     end,
             case Retry of
                 true ->
@@ -398,6 +442,13 @@ target(Target)           -> throw({unknown_target, Target}).
 
 
 %%
+%% Callbacks
+%%
+
+request_complete(_Operation, _Start, _Capacity) ->
+    ok.
+
+%%
 %% INTERNAL HELPERS
 %%
 
@@ -420,4 +471,12 @@ secret_key() ->
 ymd(Now) ->
     {Y, M, D} = edatetime:ts2date(Now),
     io_lib:format("~4.10.0B~2.10.0B~2.10.0B", [Y, M, D]).
+
+callback_mod() ->
+    case application:get_env(current, callback_mod) of
+        {ok, Mod} ->
+            Mod;
+        undefined ->
+            throw(current_missing_callback_mod)
+    end.
 

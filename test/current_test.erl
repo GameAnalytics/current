@@ -4,15 +4,17 @@
 -define(TABLE, <<"current_test_table">>).
 -define(i2b(I), list_to_binary(integer_to_list(I))).
 
+-define(NUMBER(I), {[{<<"N">>, ?i2b(I)}]}).
+
 current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
-      {timeout, 60, ?_test(table_manipulation())},
-      ?_test(batch_write_item()),
-      ?_test(scan()),
-      ?_test(q()),
-      ?_test(get_put_update_delete()),
-      ?_test(retry_with_timeout())
+      %% {timeout, 120, ?_test(table_manipulation())},
+      ?_test(batch_get_write_item())
+      %% ?_test(scan()),
+      %% ?_test(q()),
+      %% ?_test(get_put_update_delete()),
+      %% ?_test(retry_with_timeout())
      ]}.
 
 
@@ -36,27 +38,31 @@ table_manipulation() ->
     ok.
 
 
-batch_write_item() ->
-    ok = create_table(?TABLE),
-    ok = create_table(<<"current_test_other_table">>),
+batch_get_write_item() ->
+    %%ok = create_table(?TABLE),
+    %%ok = create_table(<<"current_test_other_table">>),
 
+    Keys = [{[{<<"hash_key">>, ?NUMBER(random:uniform(100000))},
+              {<<"range_key">>, ?NUMBER(random:uniform(1000))}]}
+            || _ <- lists:seq(1, 120)],
 
-    RequestItems = [begin
-                        {[{<<"PutRequest">>,
-                           {[{<<"Item">>,
-                              {[{<<"hash_key">>, {[{<<"N">>,
-                                                    ?i2b(random:uniform(100000))}]}},
-                                {<<"range_key">>, {[{<<"N">>,
-                                                     ?i2b(random:uniform(1000))}]}}
-                               ]}}]}
-                          }]}
-                    end || _ <- lists:seq(1, 30)],
-    Request = {[{<<"RequestItems">>,
-                 {[{?TABLE, RequestItems},
-                  {<<"current_test_other_table">>, RequestItems}]}
-                }]},
+    WriteRequestItems = [{[{<<"PutRequest">>, {[{<<"Item">>, Key}]}}]}
+                         || Key <- Keys],
+    WriteRequest = {[{<<"RequestItems">>,
+                      {[{?TABLE, WriteRequestItems},
+                        {<<"current_test_other_table">>, WriteRequestItems}]}
+                     }]},
 
-    ?assertEqual(ok, current:batch_write_item(Request, [])).
+    ?assertEqual(ok, current:batch_write_item(WriteRequest, [])),
+
+    %% ReadRequestItems = [{[{<<"Keys">>, Keys}]}],
+
+    %% GetRequest = {[{<<"RequestItems">>,
+    %%                 {[{?TABLE, ReadRequestItems},
+    %%                   {<<"current_test_other_table">>, ReadRequestItems}]}}]},
+
+    %% error_logger:info_msg("~p~n", [current:batch_get_item(GetRequest, [])]).
+    ok.
 
 
 
@@ -83,20 +89,21 @@ scan() ->
 
 
 
-take_write_batch_test() ->
+take_batch_test() ->
     ?assertEqual({[{<<"table1">>, lists:seq(1, 25)}],
                   [{<<"table1">>, lists:seq(26, 30)},
                    {<<"table2">>, lists:seq(1, 30)}]},
-                 current:take_write_batch(
+                 current:take_batch(
                    {[{<<"table1">>, lists:seq(1, 30)},
-                     {<<"table2">>, lists:seq(1, 30)}]})),
+                     {<<"table2">>, lists:seq(1, 30)}]}, 25)),
 
     ?assertEqual({[{<<"table1">>, [1, 2, 3]},
                    {<<"table2">>, [1, 2, 3]}],
                   []},
-                 current:take_write_batch(
+                 current:take_batch(
                    {[{<<"table1">>, [1, 2, 3]},
-                     {<<"table2">>, [1, 2, 3]}]})).
+                     {<<"table2">>, [1, 2, 3]}]}, 25)).
+
 
 
 q() ->
@@ -274,6 +281,7 @@ setup() ->
     application:set_env(current, endpoint, "us-east-1"),
     application:set_env(current, access_key, AccessKey),
     application:set_env(current, secret_access_key, SecretAccessKey),
+    application:set_env(current, callback_mod, current),
     application:start(current).
 
 teardown(_) ->
