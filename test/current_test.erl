@@ -234,7 +234,7 @@ retry_with_timeout() ->
     ?assert(timer:now_diff(os:timestamp(), Start) / 1000 > 300),
     ?assert(timer:now_diff(os:timestamp(), Start) / 1000 < 600),
 
-    meck:unload(lhttpc).
+    meck:unload(party).
 
 
 
@@ -310,7 +310,6 @@ setup() ->
     application:start(crypto),
     application:start(public_key),
     application:start(ssl),
-    application:start(lhttpc),
     application:start(party),
 
     File = filename:join([code:priv_dir(current), "aws_credentials.term"]),
