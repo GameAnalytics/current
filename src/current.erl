@@ -79,20 +79,27 @@ wait_for_delete(Table, Timeout) ->
 
 
 do_batch_get_item(Request, Opts) ->
-    do_batch_get_item({Request}, [], Opts).
+    case do_batch_get_item(Request, [], Opts) of
+        {error, Reason} ->
+            {error, Reason};
+        Result ->
+            {ok, lists:reverse(Result)}
+    end.
+
 
 do_batch_get_item({Request}, Acc, Opts) ->
-
     {value, {<<"RequestItems">>, RequestItems}, CleanRequest} =
         lists:keytake(<<"RequestItems">>, 1, Request),
 
-    {Batch, Rest} = take_batch(RequestItems, 100),
+    {Batch, Rest} = take_get_batch(RequestItems, 100),
     BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
 
-    case retry(batch_write_item, BatchRequest, Opts) of
+    case retry(batch_get_item, BatchRequest, Opts) of
         {ok, {Result}} ->
             {Responses} = proplists:get_value(<<"Responses">>, Result),
-            NewAcc = Responses ++ Acc,
+            NewAcc = orddict:merge(fun (_, Left, Right) -> Left ++ Right end,
+                                   orddict:from_list(Responses),
+                                   orddict:from_list(Acc)),
 
             {Unprocessed} = proplists:get_value(<<"UnprocessedKeys">>, Result),
             case Unprocessed =:= [] andalso Rest =:= [] of
@@ -117,8 +124,7 @@ do_batch_write_item({Request}, Opts) ->
     {value, {<<"RequestItems">>, RequestItems}, CleanRequest} =
         lists:keytake(<<"RequestItems">>, 1, Request),
 
-    {Batch, Rest} = take_batch(RequestItems, 25),
-    error_logger:info_msg("~p~n", [Batch]),
+    {Batch, Rest} = take_write_batch(RequestItems, 25),
     BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
 
     case retry(batch_write_item, BatchRequest, Opts) of
@@ -141,31 +147,52 @@ do_batch_write_item({Request}, Opts) ->
     end.
 
 
-take_batch({RequestItems}, MaxItems) ->
-    %% TODO: Validate item size
-    %% TODO: Chunk on 1MB request size
-    do_take_batch(RequestItems, 0, MaxItems, []).
+take_get_batch({RequestItems}, MaxItems) ->
+    do_take_get_batch(RequestItems, 0, MaxItems, []).
 
-do_take_batch(Remaining, MaxItems, MaxItems, Acc) ->
+do_take_get_batch(Remaining, MaxItems, MaxItems, Acc) ->
     {lists:reverse(Acc), Remaining};
 
-do_take_batch([], _, _, Acc) ->
+do_take_get_batch([], _, _, Acc) ->
     {lists:reverse(Acc), []};
 
-do_take_batch([{Table, Requests} | RemainingTables], N, MaxItems, Acc) ->
-    case split_batch(MaxItems, Requests, []) of
-        {Batch, []} ->
-            do_take_batch(RemainingTables,
-                          N + length(Batch),
-                          MaxItems,
-                          [{Table, Batch} | Acc]);
-        {Batch, Rest} ->
-            do_take_batch([{Table, Rest} | RemainingTables],
-                          N + length(Batch),
-                          MaxItems,
-                          [{Table, Batch} | Acc])
+do_take_get_batch([{Table, {Spec}} | RemainingTables], N, MaxItems, Acc) ->
+    case lists:keyfind(<<"Keys">>, 1, Spec) of
+        {<<"Keys">>, []} ->
+            do_take_get_batch(RemainingTables, N, MaxItems, Acc);
+        {<<"Keys">>, Keys} ->
+            {Batch, Rest} = split_batch(MaxItems - N, Keys, []),
+            BatchSpec = lists:keystore(<<"Keys">>, 1, Spec, {<<"Keys">>, Batch}),
+            RestSpec = lists:keystore(<<"Keys">>, 1, Spec, {<<"Keys">>, Rest}),
+            do_take_get_batch([{Table, {RestSpec}} | RemainingTables],
+                              N + length(Batch),
+                              MaxItems,
+                              [{Table, {BatchSpec}} | Acc])
     end.
 
+
+
+take_write_batch({RequestItems}, MaxItems) ->
+    %% TODO: Validate item size
+    %% TODO: Chunk on 1MB request size
+    do_take_write_batch(RequestItems, 0, MaxItems, []).
+
+do_take_write_batch([{_, []} | RemainingTables], N, MaxItems, Acc) ->
+    do_take_write_batch(RemainingTables, N, MaxItems, Acc);
+
+do_take_write_batch(Remaining, MaxItems, MaxItems, Acc) ->
+    {lists:reverse(Acc), Remaining};
+
+do_take_write_batch([], _, _, Acc) ->
+    {lists:reverse(Acc), []};
+
+do_take_write_batch([{Table, Requests} | RemainingTables], N, MaxItems, Acc) ->
+    {Batch, Rest} = split_batch(MaxItems - N, Requests, []),
+
+    do_take_write_batch([{Table, Rest} | RemainingTables],
+                        N + length(Batch),
+                        MaxItems,
+                        [{Table, Batch} | Acc]).
 
 
 split_batch(0, T, Acc)       -> {lists:reverse(Acc), T};
@@ -286,6 +313,8 @@ retry(Op, Request, Retries, Start, Opts) ->
                         {<<"ResourceNotFoundException">>, _}              -> false;
                         {<<"ResourceInUseException">>, _}                 -> true;
                         {<<"ValidationException">>, _}                    -> false;
+                        {<<"InvalidSignatureException">>, _}              -> false;
+                        {<<"SerializationException">>, _}                 -> false;
                         timeout                                           -> true
                     end,
             case Retry of
@@ -313,18 +342,18 @@ do(Operation, {UserRequest}, Timeout) ->
 
     Body = jiffy:encode(Request),
 
-    URL = "http://dynamodb." ++ endpoint() ++ ".amazonaws.com/",
+    URL = <<"http://dynamodb.", (endpoint())/binary, ".amazonaws.com/">>,
     Headers = [
-               {"host", "dynamodb." ++ endpoint() ++ ".amazonaws.com"},
-               {"content-type", "application/x-amz-json-1.0"},
-               {"x-amz-date", binary_to_list(edatetime:iso8601(Now))},
-               {"x-amz-target", target(Operation)}
+               {<<"Host">>, <<"dynamodb.", (endpoint())/binary, ".amazonaws.com">>},
+               {<<"Content-Type">>, <<"application/x-amz-json-1.0">>},
+               {<<"x-amz-date">>, edatetime:iso8601(Now)},
+               {<<"x-amz-target">>, target(Operation)}
               ],
+    Signed = [{<<"Authorization">>, authorization(Headers, Body, Now)} | Headers],
 
-    Signed = [{"Authorization", authorization(Headers, Body, Now)} | Headers],
 
-    case lhttpc:request(URL, "POST", Signed, Body, Timeout) of
-        {ok, {{200, "OK"}, _, ResponseBody}} ->
+    case party:post(URL, Signed, Body, [{timeout, Timeout}]) of
+        {ok, {{200, <<"OK">>}, _, ResponseBody}} ->
             {ok, jiffy:decode(ResponseBody)};
 
         {ok, {{Code, _}, _, ResponseBody}}
@@ -369,7 +398,7 @@ retries(Opts) -> proplists:get_value(retries, Opts, 3).
 authorization(Headers, Body, Now) ->
     CanonicalRequest = canonical(Headers, Body),
 
-    HashedCanonicalRequest = string:to_lower(
+    HashedCanonicalRequest = to_lower(
                                hmac:hexlify(
                                  erlsha2:sha256(CanonicalRequest))),
 
@@ -378,7 +407,7 @@ authorization(Headers, Body, Now) ->
     lists:flatten(
       ["AWS4-HMAC-SHA256 ",
        "Credential=", credential(Now), ", ",
-       "SignedHeaders=", string:join([string:to_lower(K)
+       "SignedHeaders=", string:join([to_lower(K)
                                       || {K, _} <- lists:sort(Headers)],
                                      ";"), ", ",
        "Signature=", signature(StringToSign, Now)]).
@@ -389,8 +418,8 @@ canonical(Headers, Body) ->
       ["POST",
        "/",
        "",
-       [string:to_lower(K) ++ ":" ++ V ++ "\n" || {K, V} <- lists:sort(Headers)],
-       string:join([string:to_lower(K) || {K, _} <- lists:sort(Headers)],
+       [[to_lower(K), ":", V, "\n"] || {K, V} <- lists:sort(Headers)],
+       string:join([to_lower(K) || {K, _} <- lists:sort(Headers)],
                    ";"),
        hexdigest(Body)],
       "\n").
@@ -411,7 +440,7 @@ derived_key(Now) ->
 
 
 signature(StringToSign, Now) ->
-    string:to_lower(
+    to_lower(
       hmac:hexlify(
         hmac:hmac256(derived_key(Now),
                      StringToSign))).
@@ -422,22 +451,23 @@ credential(Now) ->
     [access_key(), "/", ymd(Now), "/", endpoint(), "/", aws_host(), "/aws4_request"].
 
 hexdigest(Body) ->
-    string:to_lower(hmac:hexlify(erlsha2:sha256(Body))).
+    to_lower(hmac:hexlify(erlsha2:sha256(Body))).
 
 
 
-target(batch_write_item) -> "DynamoDB_20120810.BatchWriteItem";
-target(create_table)     -> "DynamoDB_20120810.CreateTable";
-target(delete_table)     -> "DynamoDB_20120810.DeleteTable";
-target(describe_table)   -> "DynamoDB_20120810.DescribeTable";
-target(list_tables)      -> "DynamoDB_20120810.ListTables";
-target('query')          -> "DynamoDB_20120810.Query";
-target(scan)             -> "DynamoDB_20120810.Scan";
-target(get_item)         -> "DynamoDB_20120810.GetItem";
-target(update_item)      -> "DynamoDB_20120810.UpdateItem";
-target(put_item)         -> "DynamoDB_20120810.PutItem";
-target(delete_item)      -> "DynamoDB_20120810.DeleteItem";
-
+target(batch_get_item)   -> <<"DynamoDB_20120810.BatchGetItem">>;
+target(batch_write_item) -> <<"DynamoDB_20120810.BatchWriteItem">>;
+target(create_table)     -> <<"DynamoDB_20120810.CreateTable">>;
+target(delete_table)     -> <<"DynamoDB_20120810.DeleteTable">>;
+target(delete_item)      -> <<"DynamoDB_20120810.DeleteItem">>;
+target(describe_table)   -> <<"DynamoDB_20120810.DescribeTable">>;
+target(get_item)         -> <<"DynamoDB_20120810.GetItem">>;
+target(list_tables)      -> <<"DynamoDB_20120810.ListTables">>;
+target(put_item)         -> <<"DynamoDB_20120810.PutItem">>;
+target('query')          -> <<"DynamoDB_20120810.Query">>;
+target(scan)             -> <<"DynamoDB_20120810.Scan">>;
+target(update_item)      -> <<"DynamoDB_20120810.UpdateItem">>;
+target(update_table)     -> <<"DynamoDB_20120810.UpdateTable">>;
 target(Target)           -> throw({unknown_target, Target}).
 
 
@@ -452,13 +482,19 @@ request_complete(_Operation, _Start, _Capacity) ->
 %% INTERNAL HELPERS
 %%
 
+to_lower(Binary) when is_binary(Binary) ->
+    string:to_lower(binary_to_list(Binary));
+to_lower(List) ->
+    string:to_lower(List).
+
+
 
 endpoint() ->
     {ok, Endpoint} = application:get_env(current, endpoint),
     Endpoint.
 
 aws_host() ->
-    application:get_env(current, aws_host, "dynamodb").
+    application:get_env(current, aws_host, <<"dynamodb">>).
 
 access_key() ->
     {ok, Access} = application:get_env(current, access_key),

@@ -10,11 +10,11 @@ current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
       %% {timeout, 120, ?_test(table_manipulation())},
-      ?_test(batch_get_write_item())
-      %% ?_test(scan()),
-      %% ?_test(q()),
-      %% ?_test(get_put_update_delete()),
-      %% ?_test(retry_with_timeout())
+      ?_test(batch_get_write_item()),
+      ?_test(scan()),
+      ?_test(q()),
+      ?_test(get_put_update_delete()),
+      ?_test(retry_with_timeout())
      ]}.
 
 
@@ -39,12 +39,12 @@ table_manipulation() ->
 
 
 batch_get_write_item() ->
-    %%ok = create_table(?TABLE),
-    %%ok = create_table(<<"current_test_other_table">>),
+    ok = create_table(?TABLE),
+    ok = create_table(<<"current_test_other_table">>),
 
     Keys = [{[{<<"hash_key">>, ?NUMBER(random:uniform(100000))},
               {<<"range_key">>, ?NUMBER(random:uniform(1000))}]}
-            || _ <- lists:seq(1, 120)],
+            || _ <- lists:seq(1, 130)],
 
     WriteRequestItems = [{[{<<"PutRequest">>, {[{<<"Item">>, Key}]}}]}
                          || Key <- Keys],
@@ -55,14 +55,18 @@ batch_get_write_item() ->
 
     ?assertEqual(ok, current:batch_write_item(WriteRequest, [])),
 
-    %% ReadRequestItems = [{[{<<"Keys">>, Keys}]}],
+    GetRequest = {[{<<"RequestItems">>,
+                    {[{?TABLE, {[{<<"Keys">>, Keys}]}},
+                      {<<"current_test_other_table">>, {[{<<"Keys">>, Keys}]}}
+                     ]}
+                   }]},
 
-    %% GetRequest = {[{<<"RequestItems">>,
-    %%                 {[{?TABLE, ReadRequestItems},
-    %%                   {<<"current_test_other_table">>, ReadRequestItems}]}}]},
+    {ok, [{?TABLE, Table1}, {<<"current_test_other_table">>, Table2}]} =
+        current:batch_get_item(GetRequest, []),
 
-    %% error_logger:info_msg("~p~n", [current:batch_get_item(GetRequest, [])]).
-    ok.
+    ?assertEqual(lists:sort(Keys), lists:sort(Table1)),
+    ?assertEqual(lists:sort(Keys), lists:sort(Table2)).
+
 
 
 
@@ -89,20 +93,55 @@ scan() ->
 
 
 
-take_batch_test() ->
-    ?assertEqual({[{<<"table1">>, lists:seq(1, 25)}],
-                  [{<<"table1">>, lists:seq(26, 30)},
-                   {<<"table2">>, lists:seq(1, 30)}]},
-                 current:take_batch(
-                   {[{<<"table1">>, lists:seq(1, 30)},
-                     {<<"table2">>, lists:seq(1, 30)}]}, 25)),
-
+take_write_batch_test() ->
     ?assertEqual({[{<<"table1">>, [1, 2, 3]},
                    {<<"table2">>, [1, 2, 3]}],
                   []},
-                 current:take_batch(
+                 current:take_write_batch(
                    {[{<<"table1">>, [1, 2, 3]},
-                     {<<"table2">>, [1, 2, 3]}]}, 25)).
+                     {<<"table2">>, [1, 2, 3]}]}, 25)),
+
+
+    {Batch1, Rest1} = current:take_write_batch(
+                      {[{<<"table1">>, lists:seq(1, 30)},
+                        {<<"table2">>, lists:seq(1, 30)}]}, 25),
+    ?assertEqual([{<<"table1">>, lists:seq(1, 25)}], Batch1),
+    ?assertEqual([{<<"table1">>, lists:seq(26, 30)},
+                  {<<"table2">>, lists:seq(1, 30)}], Rest1),
+
+
+    {Batch2, Rest2} = current:take_write_batch({Rest1}, 25),
+    ?assertEqual([{<<"table1">>, lists:seq(26, 30)},
+                  {<<"table2">>, lists:seq(1, 20)}], Batch2),
+    ?assertEqual([{<<"table2">>, lists:seq(21, 30)}], Rest2),
+
+    {Batch3, Rest3} = current:take_write_batch({Rest2}, 25),
+    ?assertEqual([{<<"table2">>, lists:seq(21, 30)}], Batch3),
+    ?assertEqual([], Rest3).
+
+take_get_batch_test() ->
+    Spec = {[{<<"Keys">>, [1,2,3]},
+             {<<"AttributesToGet">>, [<<"foo">>, <<"bar">>]},
+             {<<"ConsistentRead">>, false}]},
+
+    {Batch1, Rest1} = current:take_get_batch({[{<<"table1">>, Spec},
+                                               {<<"table2">>, Spec}]}, 2),
+
+
+    ?assertEqual([{<<"table1">>, {[{<<"Keys">>, [1, 2]},
+                                   {<<"AttributesToGet">>, [<<"foo">>, <<"bar">>]},
+                                   {<<"ConsistentRead">>, false}]}}],
+                 Batch1),
+
+    {Batch2, _Rest2} = current:take_get_batch({Rest1}, 2),
+    ?assertEqual([{<<"table1">>, {[{<<"Keys">>, [3]},
+                                   {<<"AttributesToGet">>, [<<"foo">>, <<"bar">>]},
+                                   {<<"ConsistentRead">>, false}]}},
+                  {<<"table2">>, {[{<<"Keys">>, [1]},
+                                   {<<"AttributesToGet">>, [<<"foo">>, <<"bar">>]},
+                                   {<<"ConsistentRead">>, false}]}}],
+                 Batch2).
+
 
 
 
@@ -182,8 +221,8 @@ retry_with_timeout() ->
     ok = create_table(?TABLE),
     ok = clear_table(?TABLE),
 
-    meck:new(lhttpc, [passthrough]),
-    meck:expect(lhttpc, request, fun (_, _, _, _, _) ->
+    meck:new(party, [passthrough]),
+    meck:expect(party, post, fun (_, _, _, _) ->
                                          timer:sleep(100),
                                          {error, timeout}
                                  end),
@@ -205,40 +244,40 @@ retry_with_timeout() ->
 
 key_derivation_test() ->
     application:set_env(current, secret_access_key,
-                        "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"),
-    application:set_env(current, region, "us-east-1"),
-    application:set_env(current, aws_host, "iam"),
+                        <<"wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY">>),
+    application:set_env(current, region, <<"us-east-1">>),
+    application:set_env(current, aws_host, <<"iam">>),
     Now = edatetime:datetime2ts({{2012, 2, 15}, {0, 0, 0}}),
 
     ?assertEqual("f4780e2d9f65fa895f9c67b32ce1baf0b0d8a43505a000a1a9e090d414db404d",
                  string:to_lower(hmac:hexlify(current:derived_key(Now)))).
 
 post_vanilla_test() ->
-    application:set_env(current, endpoint, "us-east-1"),
-    application:set_env(current, aws_host, "host"),
-    application:set_env(current, access_key, "AKIDEXAMPLE"),
+    application:set_env(current, endpoint, <<"us-east-1">>),
+    application:set_env(current, aws_host, <<"host">>),
+    application:set_env(current, access_key, <<"AKIDEXAMPLE">>),
     application:set_env(current, secret_access_key,
-                        "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"),
+                        <<"wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY">>),
 
     Now = edatetime:datetime2ts({{2011, 9, 9}, {23, 36, 0}}),
 
     %% from post-vanilla.req
-    Headers = [{"date", "Mon, 09 Sep 2011 23:36:00 GMT"},
-               {"host", "host.foo.com"}],
+    Headers = [{<<"date">>, <<"Mon, 09 Sep 2011 23:36:00 GMT">>},
+               {<<"host">>, <<"host.foo.com">>}],
 
     CanonicalRequest = current:canonical(Headers, ""),
-    ?assertEqual(creq("post-vanilla"), lists:flatten(CanonicalRequest)),
+    ?assertEqual(creq("post-vanilla"), iolist_to_binary(CanonicalRequest)),
 
     HashedCanonicalRequest = string:to_lower(
                                hmac:hexlify(
                                  erlsha2:sha256(CanonicalRequest))),
 
     ?assertEqual(sts("post-vanilla"),
-                 lists:flatten(
+                 iolist_to_binary(
                    current:string_to_sign(HashedCanonicalRequest, Now))),
 
     ?assertEqual(authz("post-vanilla"),
-                 lists:flatten(
+                 iolist_to_binary(
                    current:authorization(Headers, "", Now))).
 
 
@@ -250,18 +289,18 @@ post_vanilla_test() ->
 creq(Name) ->
     {ok, B} = file:read_file(
                 filename:join(["../test", "aws4_testsuite", Name ++ ".creq"])),
-    binary_to_list(binary:replace(B, <<"\r\n">>, <<"\n">>, [global])).
+    binary:replace(B, <<"\r\n">>, <<"\n">>, [global]).
 
 sts(Name) ->
     {ok, B} = file:read_file(
                 filename:join(["../test", "aws4_testsuite", Name ++ ".sts"])),
-    binary_to_list(binary:replace(B, <<"\r\n">>, <<"\n">>, [global])).
+    binary:replace(B, <<"\r\n">>, <<"\n">>, [global]).
 
 
 authz(Name) ->
     {ok, B} = file:read_file(
                 filename:join(["../test", "aws4_testsuite", Name ++ ".authz"])),
-    binary_to_list(binary:replace(B, <<"\r\n">>, <<"\n">>, [global])).
+    binary:replace(B, <<"\r\n">>, <<"\n">>, [global]).
 
 
 
@@ -272,16 +311,20 @@ setup() ->
     application:start(public_key),
     application:start(ssl),
     application:start(lhttpc),
+    application:start(party),
 
     File = filename:join([code:priv_dir(current), "aws_credentials.term"]),
     {ok, Cred} = file:consult(File),
     AccessKey = proplists:get_value(access_key, Cred),
     SecretAccessKey = proplists:get_value(secret_access_key, Cred),
 
-    application:set_env(current, endpoint, "us-east-1"),
+    application:set_env(current, endpoint, <<"us-east-1">>),
     application:set_env(current, access_key, AccessKey),
     application:set_env(current, secret_access_key, SecretAccessKey),
     application:set_env(current, callback_mod, current),
+
+    ok = party:connect(<<"http://dynamodb.us-east-1.amazonaws.com">>, 2),
+
     application:start(current).
 
 teardown(_) ->
@@ -310,6 +353,8 @@ create_table(Name) ->
             ?assertMatch({ok, _},
                          current:create_table(R, [{timeout, 5000}, {retries, 3}])),
             ok = current:wait_for_active(?TABLE, 5000);
+        {error, {Type, Reason}} ->
+            error_logger:info_msg("~p~n", [Reason]);
         {ok, _} ->
             ok
     end.
