@@ -323,8 +323,7 @@ retry(Op, Request, Retries, Start, Opts) ->
 
             case Retry of
                 true ->
-                    case Retries+1 =:= retries(Opts) orelse
-                        timer:now_diff(os:timestamp(), Start) / 1000 > timeout(Opts) of
+                    case Retries =:= retries(Opts) of
                         true ->
                             {error, max_retries};
                         false ->

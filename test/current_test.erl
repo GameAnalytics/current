@@ -14,7 +14,8 @@ current_test_() ->
       ?_test(scan()),
       ?_test(q()),
       ?_test(get_put_update_delete()),
-      ?_test(retry_with_timeout())
+      %% ?_test(retry_with_timeout()),
+      ?_test(throttled())
      ]}.
 
 
@@ -235,6 +236,11 @@ retry_with_timeout() ->
     ?assert(timer:now_diff(os:timestamp(), Start) / 1000 < 600),
 
     meck:unload(party).
+
+throttled() ->
+    ok = create_table(?TABLE),
+    ok = clear_table(?TABLE),
+    ok.
 
 
 
