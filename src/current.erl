@@ -352,7 +352,8 @@ do(Operation, {UserRequest}, Timeout) ->
     Signed = [{<<"Authorization">>, authorization(Headers, Body, Now)} | Headers],
 
 
-    case party:post(URL, Signed, Body, [{timeout, Timeout}]) of
+    case party:post(URL, Signed, Body, [{server_timeout, Timeout},
+                                        {call_timeout, Timeout*2}]) of
         {ok, {{200, <<"OK">>}, _, ResponseBody}} ->
             {ok, jiffy:decode(ResponseBody)};
 
