@@ -315,8 +315,12 @@ retry(Op, Request, Retries, Start, Opts) ->
                         {<<"ValidationException">>, _}                    -> false;
                         {<<"InvalidSignatureException">>, _}              -> false;
                         {<<"SerializationException">>, _}                 -> false;
-                        timeout                                           -> true
+                        timeout                                           -> true;
+                        max_concurrency                                   -> true
                     end,
+
+            catch (callback_mod()):request_error(Op, RequestStart, Reason),
+
             case Retry of
                 true ->
                     case Retries+1 =:= retries(Opts) orelse
@@ -477,6 +481,9 @@ target(Target)           -> throw({unknown_target, Target}).
 %%
 
 request_complete(_Operation, _Start, _Capacity) ->
+    ok.
+
+request_error(_Operation, _Start, _Reason) ->
     ok.
 
 %%
