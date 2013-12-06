@@ -316,6 +316,7 @@ retry(Op, Request, Retries, Start, Opts) ->
                         {<<"InvalidSignatureException">>, _}              -> false;
                         {<<"SerializationException">>, _}                 -> false;
                         timeout                                           -> true;
+                        claim_timeout                                     -> true;
                         max_concurrency                                   -> true
                     end,
 

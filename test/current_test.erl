@@ -14,7 +14,7 @@ current_test_() ->
       {timeout, 10, ?_test(scan())},
       {timeout, 20, ?_test(q())},
       {timeout, 20, ?_test(get_put_update_delete())},
-      %% {timeout, 10, ?_test(retry_with_timeout())},
+      {timeout, 10, ?_test(retry_with_timeout())},
       {timeout, 10, ?_test(throttled())}
      ]}.
 
@@ -220,21 +220,14 @@ get_put_update_delete() ->
 
 
 retry_with_timeout() ->
-    ok = create_table(?TABLE),
-    ok = clear_table(?TABLE),
-
     meck:new(party, [passthrough]),
     meck:expect(party, post, fun (_, _, _, _) ->
-                                         timer:sleep(100),
-                                         {error, timeout}
+                                         {error, claim_timeout}
                                  end),
 
-    Start = os:timestamp(),
     ?assertEqual({error, max_retries},
                  current:describe_table({[{<<"TableName">>, ?TABLE}]},
-                                        [{timeout, 300}, {retries, 10}])),
-    ?assert(timer:now_diff(os:timestamp(), Start) / 1000 > 300),
-    ?assert(timer:now_diff(os:timestamp(), Start) / 1000 < 600),
+                                        [{retries, 3}])),
 
     meck:unload(party).
 
