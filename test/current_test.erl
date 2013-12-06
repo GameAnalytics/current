@@ -9,12 +9,13 @@
 current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
-      %% {timeout, 120, ?_test(table_manipulation())},
+      {timeout, 120, ?_test(table_manipulation())},
       {timeout, 10, ?_test(batch_get_write_item())},
       {timeout, 10, ?_test(scan())},
       {timeout, 20, ?_test(q())},
       {timeout, 20, ?_test(get_put_update_delete())},
       {timeout, 10, ?_test(retry_with_timeout())},
+      {timeout, 10, ?_test(timeout())},
       {timeout, 10, ?_test(throttled())}
      ]}.
 
@@ -230,6 +231,12 @@ retry_with_timeout() ->
                                         [{retries, 3}])),
 
     meck:unload(party).
+
+timeout() ->
+    ?assertEqual({error, max_retries},
+                 current:describe_table({[{<<"TableName">>, ?TABLE}]},
+                                        [{call_timeout, 1}])).
+
 
 throttled() ->
     ok = create_table(?TABLE),

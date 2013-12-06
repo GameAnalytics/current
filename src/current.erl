@@ -308,21 +308,9 @@ retry(Op, Request, Retries, Start, Opts) ->
             {ok, Response};
 
         {error, Reason} = Error ->
-            Retry = case Reason of
-                        {<<"ProvisionedThroughputExceededException">>, _} -> true;
-                        {<<"ResourceNotFoundException">>, _}              -> false;
-                        {<<"ResourceInUseException">>, _}                 -> true;
-                        {<<"ValidationException">>, _}                    -> false;
-                        {<<"InvalidSignatureException">>, _}              -> false;
-                        {<<"SerializationException">>, _}                 -> false;
-                        timeout                                           -> true;
-                        claim_timeout                                     -> true;
-                        max_concurrency                                   -> true
-                    end,
-
             catch (callback_mod()):request_error(Op, RequestStart, Reason),
 
-            case Retry of
+            case should_retry(Reason) of
                 true ->
                     case Retries =:= retries(Opts) of
                         true ->
@@ -335,7 +323,6 @@ retry(Op, Request, Retries, Start, Opts) ->
                     Error
             end
     end.
-
 
 
 do(Operation, {UserRequest}, Opts) ->
@@ -358,7 +345,7 @@ do(Operation, {UserRequest}, Opts) ->
               | Headers],
 
     ServerTimeout = proplists:get_value(server_timeout, Opts, 5000),
-    CallTimeout = proplists:get_value(server_timeout, Opts, 10000),
+    CallTimeout = proplists:get_value(call_timeout, Opts, 10000),
     ClaimTimeout = proplists:get_value(claim_timeout, Opts, 1000), %% us
 
     case party:post(URL, Signed, Body, [{server_timeout, ServerTimeout},
@@ -480,6 +467,19 @@ target(scan)             -> <<"DynamoDB_20120810.Scan">>;
 target(update_item)      -> <<"DynamoDB_20120810.UpdateItem">>;
 target(update_table)     -> <<"DynamoDB_20120810.UpdateTable">>;
 target(Target)           -> throw({unknown_target, Target}).
+
+
+should_retry({<<"ProvisionedThroughputExceededException">>, _}) -> true;
+should_retry({<<"ResourceNotFoundException">>, _})              -> false;
+should_retry({<<"ResourceInUseException">>, _})                 -> true;
+should_retry({<<"ValidationException">>, _})                    -> false;
+should_retry({<<"InvalidSignatureException">>, _})              -> false;
+should_retry({<<"SerializationException">>, _})                 -> false;
+should_retry(timeout)                                           -> true;
+should_retry(claim_timeout)                                     -> true;
+should_retry(busy)                                              -> true;
+should_retry(max_concurrency)                                   -> true.
+
 
 
 %%
