@@ -295,7 +295,7 @@ retry(Op, Request, Opts) ->
 
 retry(Op, Request, Retries, Start, Opts) ->
     RequestStart = os:timestamp(),
-    case do(Op, Request, timeout(Opts)) of
+    case do(Op, Request, Opts) of
         {ok, Response} ->
 
             case proplists:get_value(<<"ConsumedCapacity">>,
@@ -337,7 +337,7 @@ retry(Op, Request, Retries, Start, Opts) ->
 
 
 
-do(Operation, {UserRequest}, Timeout) ->
+do(Operation, {UserRequest}, Opts) ->
     Now = edatetime:now2ts(),
 
     Request = {lists:keystore(<<"ReturnConsumedCapacity">>, 1, UserRequest,
@@ -347,16 +347,22 @@ do(Operation, {UserRequest}, Timeout) ->
 
     URL = <<"http://dynamodb.", (endpoint())/binary, ".amazonaws.com/">>,
     Headers = [
-               {<<"Host">>, <<"dynamodb.", (endpoint())/binary, ".amazonaws.com">>},
+               {<<"Host">>, <<"dynamodb.", (endpoint())/binary,
+                              ".amazonaws.com">>},
                {<<"Content-Type">>, <<"application/x-amz-json-1.0">>},
                {<<"x-amz-date">>, edatetime:iso8601(Now)},
                {<<"x-amz-target">>, target(Operation)}
               ],
-    Signed = [{<<"Authorization">>, authorization(Headers, Body, Now)} | Headers],
+    Signed = [{<<"Authorization">>, authorization(Headers, Body, Now)}
+              | Headers],
 
+    ServerTimeout = proplists:get_value(server_timeout, Opts, 5000),
+    CallTimeout = proplists:get_value(server_timeout, Opts, 10000),
+    ClaimTimeout = proplists:get_value(claim_timeout, Opts, 1000), %% us
 
-    case party:post(URL, Signed, Body, [{server_timeout, Timeout},
-                                        {call_timeout, Timeout*2}]) of
+    case party:post(URL, Signed, Body, [{server_timeout, ServerTimeout},
+                                        {call_timeout, CallTimeout},
+                                        {claim_timeout, ClaimTimeout}]) of
         {ok, {{200, <<"OK">>}, _, ResponseBody}} ->
             {ok, jiffy:decode(ResponseBody)};
 
