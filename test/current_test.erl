@@ -10,12 +10,12 @@ current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
       %% {timeout, 120, ?_test(table_manipulation())},
-      ?_test(batch_get_write_item()),
-      ?_test(scan()),
-      ?_test(q()),
-      ?_test(get_put_update_delete()),
-      %% ?_test(retry_with_timeout()),
-      ?_test(throttled())
+      {timeout, 10, ?_test(batch_get_write_item())},
+      {timeout, 10, ?_test(scan())},
+      {timeout, 20, ?_test(q())},
+      {timeout, 20, ?_test(get_put_update_delete())},
+      %% {timeout, 10, ?_test(retry_with_timeout())},
+      {timeout, 10, ?_test(throttled())}
      ]}.
 
 
@@ -172,6 +172,7 @@ q() ->
     ?assertEqual(lists:sort(Items), lists:sort(ResultItems)).
 
 
+
 get_put_update_delete() ->
     ok = create_table(?TABLE),
     ok = clear_table(?TABLE),
@@ -240,7 +241,35 @@ retry_with_timeout() ->
 throttled() ->
     ok = create_table(?TABLE),
     ok = clear_table(?TABLE),
-    ok.
+
+    E = <<"com.amazonaws.dynamodb.v20120810#"
+          "ProvisionedThroughputExceededException">>,
+
+    ThrottledResponse = {ok, {{400, foo}, [],
+                              jiffy:encode(
+                                {[{'__type',  E},
+                                  {message, <<"foobar">>}]})}},
+
+    meck:new(party, [passthrough]),
+    meck:expect(party, post, 4,
+                meck_ret_spec:seq(
+                  [ThrottledResponse,
+                   ThrottledResponse,
+                   meck_ret_spec:passthrough()])),
+
+
+    Key = {[{<<"hash_key">>, ?NUMBER(1)},
+            {<<"range_key">>, ?NUMBER(1)}]},
+
+    WriteRequestItems = [{[{<<"PutRequest">>, {[{<<"Item">>, Key}]}}]}],
+
+    WriteRequest = {[{<<"RequestItems">>,
+                      {[{?TABLE, WriteRequestItems}]}}
+                    ]},
+
+    ?assertEqual(ok, current:batch_write_item(WriteRequest, [{retries, 3}])),
+
+    meck:unload(party).
 
 
 
@@ -316,6 +345,7 @@ setup() ->
     application:start(crypto),
     application:start(public_key),
     application:start(ssl),
+    application:start(carpool),
     application:start(party),
 
     File = filename:join([code:priv_dir(current), "aws_credentials.term"]),
