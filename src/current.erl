@@ -91,32 +91,30 @@ do_batch_get_item({Request}, Acc, Opts) ->
     {value, {<<"RequestItems">>, RequestItems}, CleanRequest} =
         lists:keytake(<<"RequestItems">>, 1, Request),
 
-    {Batch, Rest} = take_get_batch(RequestItems, 100),
+    case take_get_batch(RequestItems, 100) of
+        {[], []} ->
+            Acc;
+        {Batch, Rest} ->
+            BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
 
-    BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
+            case retry(batch_get_item, BatchRequest, Opts) of
+                {ok, {Result}} ->
+                    {Responses} = proplists:get_value(<<"Responses">>, Result),
+                    NewAcc = orddict:merge(fun (_, Left, Right) -> Left ++ Right end,
+                                           orddict:from_list(Responses),
+                                           orddict:from_list(Acc)),
 
-    case retry(batch_get_item, BatchRequest, Opts) of
-        {ok, {Result}} ->
-            {Responses} = proplists:get_value(<<"Responses">>, Result),
-            NewAcc = orddict:merge(fun (_, Left, Right) -> Left ++ Right end,
-                                   orddict:from_list(Responses),
-                                   orddict:from_list(Acc)),
-
-            {Unprocessed} = proplists:get_value(<<"UnprocessedKeys">>, Result),
-            Remaining = orddict:merge(fun (_, Left, Right) ->
-                                              Left ++ Right
-                                      end,
-                                      orddict:from_list(Unprocessed),
-                                      orddict:from_list(Rest)),
-            case Remaining =:= [] of
-                true ->
-                    NewAcc;
-                false ->
+                    {Unprocessed} = proplists:get_value(<<"UnprocessedKeys">>, Result),
+                    Remaining = orddict:merge(fun (_, Left, Right) ->
+                                                      Left ++ Right
+                                              end,
+                                              orddict:from_list(Unprocessed),
+                                              orddict:from_list(Rest)),
                     do_batch_get_item({[{<<"RequestItems">>, {Remaining}}]},
-                                      NewAcc, Opts)
-            end;
-        {error, _} = Error ->
-            Error
+                                      NewAcc, Opts);
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 

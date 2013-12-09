@@ -46,7 +46,7 @@ batch_get_write_item() ->
 
     Keys = [{[{<<"hash_key">>, ?NUMBER(random:uniform(100000))},
               {<<"range_key">>, ?NUMBER(random:uniform(1000))}]}
-            || _ <- lists:seq(1, 130)],
+            || _ <- lists:seq(1, 50)],
 
     WriteRequestItems = [{[{<<"PutRequest">>, {[{<<"Item">>, Key}]}}]}
                          || Key <- Keys],
