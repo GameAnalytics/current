@@ -92,6 +92,7 @@ do_batch_get_item({Request}, Acc, Opts) ->
         lists:keytake(<<"RequestItems">>, 1, Request),
 
     {Batch, Rest} = take_get_batch(RequestItems, 100),
+
     BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
 
     case retry(batch_get_item, BatchRequest, Opts) of
@@ -102,16 +103,15 @@ do_batch_get_item({Request}, Acc, Opts) ->
                                    orddict:from_list(Acc)),
 
             {Unprocessed} = proplists:get_value(<<"UnprocessedKeys">>, Result),
-            case Unprocessed =:= [] andalso Rest =:= [] of
+            Remaining = orddict:merge(fun (_, Left, Right) ->
+                                              Left ++ Right
+                                      end,
+                                      orddict:from_list(Unprocessed),
+                                      orddict:from_list(Rest)),
+            case Remaining =:= [] of
                 true ->
                     NewAcc;
                 false ->
-                    Remaining = orddict:merge(fun (_, Left, Right) ->
-                                                      Left ++ Right
-                                              end,
-                                              orddict:from_list(Unprocessed),
-                                              orddict:from_list(Rest)),
-
                     do_batch_get_item({[{<<"RequestItems">>, {Remaining}}]},
                                       NewAcc, Opts)
             end;
@@ -262,7 +262,7 @@ do_scan({UserRequest}, Acc, Opts) ->
 
     case retry(scan, Request, Opts) of
         {ok, {Response}} ->
-            Items = proplists:get_value(<<"Items">>, Response),
+            Items = proplists:get_value(<<"Items">>, Response, []),
             case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
                 undefined ->
                     {ok, Items ++ Acc};

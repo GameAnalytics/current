@@ -9,7 +9,7 @@
 current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
-      {timeout, 120, ?_test(table_manipulation())},
+      %% {timeout, 120, ?_test(table_manipulation())},
       {timeout, 10, ?_test(batch_get_write_item())},
       {timeout, 10, ?_test(scan())},
       {timeout, 20, ?_test(q())},
