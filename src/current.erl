@@ -357,7 +357,7 @@ do(Operation, {UserRequest}, Opts) ->
             {ok, jiffy:decode(ResponseBody)};
 
         {ok, {{Code, _}, _, ResponseBody}}
-          when 400 =< Code andalso Code =< 499 ->
+          when 400 =< Code andalso Code =< 599 ->
             {Response} = jiffy:decode(ResponseBody),
             Type = case proplists:get_value(<<"__type">>, Response) of
                        <<"com.amazonaws.dynamodb.v20120810#", T/binary>> ->
@@ -375,10 +375,6 @@ do(Operation, {UserRequest}, Opts) ->
                               M
                       end,
             {error, {Type, Message}};
-
-        {ok, {{Code, _}, _, ResponseBody}}
-          when 500 =< Code andalso Code =< 599 ->
-            {error, {server, jiffy:decode(ResponseBody)}};
 
         {error, Reason} ->
             {error, Reason}
@@ -477,6 +473,7 @@ should_retry({<<"ResourceInUseException">>, _})                 -> true;
 should_retry({<<"ValidationException">>, _})                    -> false;
 should_retry({<<"InvalidSignatureException">>, _})              -> false;
 should_retry({<<"SerializationException">>, _})                 -> false;
+should_retry({<<"InternalServerError">>, _})                    -> true;
 should_retry(timeout)                                           -> true;
 should_retry(claim_timeout)                                     -> true;
 should_retry(busy)                                              -> true;
