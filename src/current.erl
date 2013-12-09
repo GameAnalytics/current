@@ -122,26 +122,30 @@ do_batch_write_item({Request}, Opts) ->
     {value, {<<"RequestItems">>, RequestItems}, CleanRequest} =
         lists:keytake(<<"RequestItems">>, 1, Request),
 
-    {Batch, Rest} = take_write_batch(RequestItems, 25),
-    BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
+    case take_write_batch(RequestItems, 25) of
+        {[], []} ->
+            ok;
+        {Batch, Rest} ->
+            BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
 
-    case retry(batch_write_item, BatchRequest, Opts) of
-        {ok, {Result}} ->
-            {Unprocessed} = proplists:get_value(<<"UnprocessedItems">>, Result),
-            case Unprocessed =:= [] andalso Rest =:= [] of
-                true ->
-                    ok;
-                false ->
-                    Remaining = orddict:merge(fun (_, Left, Right) ->
-                                                      Left ++ Right
-                                              end,
-                                              orddict:from_list(Unprocessed),
-                                              orddict:from_list(Rest)),
+            case retry(batch_write_item, BatchRequest, Opts) of
+                {ok, {Result}} ->
+                    {Unprocessed} = proplists:get_value(<<"UnprocessedItems">>, Result),
+                    case Unprocessed =:= [] andalso Rest =:= [] of
+                        true ->
+                            ok;
+                        false ->
+                            Remaining = orddict:merge(fun (_, Left, Right) ->
+                                                              Left ++ Right
+                                                      end,
+                                                      orddict:from_list(Unprocessed),
+                                                      orddict:from_list(Rest)),
 
-                    do_batch_write_item({[{<<"RequestItems">>, {Remaining}}]}, Opts)
-            end;
-        {error, _} = Error ->
-            Error
+                            do_batch_write_item({[{<<"RequestItems">>, {Remaining}}]}, Opts)
+                    end;
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 
