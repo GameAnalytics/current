@@ -1,15 +1,54 @@
 %% @doc: DynamoDB client
 -module(current).
--compile(export_all).
 
+%% DynamoDB API
+-export([
+         batch_get_item/1,
+         batch_get_item/2,
+         batch_write_item/1,
+         batch_write_item/2,
+         create_table/1,
+         create_table/2,
+         delete_item/1,
+         delete_item/2,
+         delete_table/1,
+         delete_table/2,
+         describe_table/1,
+         describe_table/2,
+         get_item/1,
+         get_item/2,
+         list_tables/1,
+         list_tables/2,
+         put_item/1,
+         put_item/2,
+         q/1,
+         q/2,
+         scan/1,
+         scan/2,
+         update_item/1,
+         update_item/2,
+         update_table/1,
+         update_table/2
+        ]).
+
+
+-export([wait_for_delete/2, wait_for_active/2]).
+
+
+%% Exported for testing
+-export([take_get_batch/2, take_write_batch/2]).
+-export([derived_key/1, canonical/2, string_to_sign/2, authorization/3]).
 
 %%
 %% LOW-LEVEL API
 %%
 
 
+batch_get_item(Request)         -> do_batch_get_item(Request, []).
 batch_get_item(Request, Opts)   -> do_batch_get_item(Request, Opts).
+batch_write_item(Request)       -> do_batch_write_item(Request, []).
 batch_write_item(Request, Opts) -> do_batch_write_item(Request, Opts).
+create_table(Request)           -> retry(create_table, Request, []).
 create_table(Request, Opts)     -> retry(create_table, Request, Opts).
 delete_item(Request)            -> retry(delete_item, Request, []).
 delete_item(Request, Opts)      -> retry(delete_item, Request, Opts).
@@ -23,7 +62,9 @@ list_tables(Request)            -> retry(list_tables, Request, []).
 list_tables(Request, Opts)      -> retry(list_tables, Request, Opts).
 put_item(Request)               -> retry(put_item, Request, []).
 put_item(Request, Opts)         -> retry(put_item, Request, Opts).
+q(Request)                      -> do_query(Request, []).
 q(Request, Opts)                -> do_query(Request, Opts).
+scan(Request)                   -> do_scan(Request, []).
 scan(Request, Opts)             -> do_scan(Request, Opts).
 update_item(Request)            -> retry(update_item, Request, []).
 update_item(Request, Opts)      -> retry(update_item, Request, Opts).
