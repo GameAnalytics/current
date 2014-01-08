@@ -515,6 +515,7 @@ should_retry({<<"ValidationException">>, _})                    -> false;
 should_retry({<<"InvalidSignatureException">>, _})              -> false;
 should_retry({<<"SerializationException">>, _})                 -> false;
 should_retry({<<"InternalServerError">>, _})                    -> true;
+should_retry({<<"ConditionalCheckFailedException">>, _})        -> false;
 should_retry(timeout)                                           -> true;
 should_retry(claim_timeout)                                     -> true;
 should_retry(busy)                                              -> true;
