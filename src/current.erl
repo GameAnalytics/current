@@ -146,11 +146,18 @@ do_batch_get_item({Request}, Acc, Opts) ->
                                            orddict:from_list(Acc)),
 
                     {Unprocessed} = proplists:get_value(<<"UnprocessedKeys">>, Result),
-                    Remaining = orddict:merge(fun (_, Left, Right) ->
-                                                      Left ++ Right
-                                              end,
-                                              orddict:from_list(Unprocessed),
-                                              orddict:from_list(Rest)),
+                    Remaining = orddict:merge(
+                                  fun (_, {Left}, {Right}) ->
+                                          LeftKeys = proplists:get_value(
+                                                       <<"Keys">>, Left),
+                                          RightKeys = proplists:get_value(
+                                                        <<"Keys">>, Right),
+                                          {lists:keystore(
+                                             <<"Keys">>, 1, Right,
+                                             {<<"Keys">>, LeftKeys ++ RightKeys})}
+                                  end,
+                                  orddict:from_list(Unprocessed),
+                                  orddict:from_list(Rest)),
                     do_batch_get_item({[{<<"RequestItems">>, {Remaining}}]},
                                       NewAcc, Opts);
                 {error, _} = Error ->

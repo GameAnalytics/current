@@ -11,6 +11,7 @@ current_test_() ->
      [
       %% {timeout, 120, ?_test(table_manipulation())},
       {timeout, 10, ?_test(batch_get_write_item())},
+      {timeout, 10, ?_test(batch_get_unprocessed_items())},
       {timeout, 10, ?_test(scan())},
       {timeout, 20, ?_test(q())},
       {timeout, 20, ?_test(get_put_update_delete())},
@@ -70,6 +71,59 @@ batch_get_write_item() ->
     ?assertEqual(lists:sort(Keys), lists:sort(Table2)).
 
 
+batch_get_unprocessed_items() ->
+    ok = create_table(?TABLE),
+    ok = create_table(<<"current_test_other_table">>),
+
+    Keys = [{[{<<"hash_key">>, ?NUMBER(random:uniform(100000))},
+              {<<"range_key">>, ?NUMBER(random:uniform(1000))}]}
+            || _ <- lists:seq(1, 150)],
+
+    WriteRequestItems = [{[{<<"PutRequest">>, {[{<<"Item">>, Key}]}}]}
+                         || Key <- Keys],
+    WriteRequest = {[{<<"RequestItems">>,
+                      {[{?TABLE, WriteRequestItems},
+                        {<<"current_test_other_table">>, WriteRequestItems}]}
+                     }]},
+
+    ?assertEqual(ok, current:batch_write_item(WriteRequest, [])),
+
+
+    {Keys1, Keys2} = lists:split(110, Keys),
+    UnprocessedKeys = {[{?TABLE, {[{<<"Keys">>, Keys2}]}},
+                        {<<"current_test_other_table">>, {[{<<"Keys">>, Keys2}]}}
+                       ]},
+    meck:new(party, [passthrough]),
+    meck:expect(party, post, 4,
+                meck:seq([fun (URL, Headers, Body, Opts) ->
+                                  {ok, {{200, <<"OK">>}, ResponseHeaders, ResponseBody}} =
+                                       meck:passthrough([URL, Headers, Body, Opts]),
+                                  {Result} = jiffy:decode(ResponseBody),
+                                  ?assertEqual(
+                                     {[]}, proplists:get_value(<<"UnprocessedKeys">>, Result)),
+                                  MockResult = lists:keystore(
+                                                 <<"UnprocessedKeys">>, 1,
+                                                 Result, {<<"UnprocessedKeys">>,
+                                                          UnprocessedKeys}),
+                                  {ok, {{200, <<"OK">>}, ResponseHeaders,
+                                        jiffy:encode({MockResult})}}
+                          end,
+                          meck:passthrough()])),
+
+    GetRequest = {[{<<"RequestItems">>,
+                    {[{?TABLE, {[{<<"Keys">>, Keys1}]}},
+                      {<<"current_test_other_table">>, {[{<<"Keys">>, Keys1}]}}
+                     ]}
+                   }]},
+
+    {ok, [{?TABLE, Table1}, {<<"current_test_other_table">>, Table2}]} =
+        current:batch_get_item(GetRequest, []),
+
+    ?assertEqual(lists:sort(Keys), lists:sort(Table1)),
+    ?assertEqual(lists:sort(Keys), lists:sort(Table2)),
+
+    ?assert(meck:validate(party)),
+    ok = meck:unload(party).
 
 
 scan() ->
