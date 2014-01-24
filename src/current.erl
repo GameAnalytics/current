@@ -37,6 +37,7 @@
 
 %% Exported for testing
 -export([take_get_batch/2, take_write_batch/2]).
+-export([request_complete/3, request_error/3]).
 -export([derived_key/1, canonical/2, string_to_sign/2, authorization/3]).
 
 %%

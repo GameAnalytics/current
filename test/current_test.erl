@@ -395,10 +395,6 @@ authz(Name) ->
 
 
 setup() ->
-    application:start(asn1),
-    application:start(crypto),
-    application:start(public_key),
-    application:start(ssl),
     application:start(carpool),
     application:start(party),
 
