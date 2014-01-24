@@ -1,4 +1,4 @@
-priv
+priv/aws_credentials.term
 .eunit
 *~
 deps
