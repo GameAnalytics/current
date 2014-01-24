@@ -9,7 +9,7 @@
 current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
-      %% {timeout, 120, ?_test(table_manipulation())},
+      {timeout, 120, ?_test(table_manipulation())},
       {timeout, 10, ?_test(batch_get_write_item())},
       {timeout, 10, ?_test(batch_get_unprocessed_items())},
       {timeout, 10, ?_test(scan())},
@@ -406,7 +406,6 @@ setup() ->
     application:set_env(current, endpoint, <<"us-east-1">>),
     application:set_env(current, access_key, AccessKey),
     application:set_env(current, secret_access_key, SecretAccessKey),
-    application:set_env(current, callback_mod, current),
 
     ok = party:connect(<<"http://dynamodb.us-east-1.amazonaws.com">>, 2),
 

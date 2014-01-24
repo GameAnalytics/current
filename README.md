@@ -26,10 +26,8 @@ ok
 ok
 5> application:set_env(current, secret_access_key, <<"bar">>).
 ok
-6> application:set_env(current, callback_mod, current).
-ok
 
-7> GetRequest = {[{<<"TableName">>, <<"current_test_table">>}, {<<"Key">>, {[{<<"hash_key">>, {[{<<"N">>, <<"1">>}]}}, {<<"range_key">>, {[{<<"N">>, <<"1">>}]}}]}}]}.
+6> GetRequest = {[{<<"TableName">>, <<"current_test_table">>}, {<<"Key">>, {[{<<"hash_key">>, {[{<<"N">>, <<"1">>}]}}, {<<"range_key">>, {[{<<"N">>, <<"1">>}]}}]}}]}.
 {[{<<"TableName">>,<<"current_test_table">>},
   {<<"Key">>,
    {[{<<"hash_key">>,{[{<<"N">>,<<"1">>}]}},
@@ -45,6 +43,26 @@ ok
 ```
 
 With the new maps datastructure life will be great.
+
+## Instrumentation
+
+Current will call functions in the module specified in the
+`callback_mod` environment variable. At the moment, you need to
+implement two functions: `request_complete/3` and `request_error/3`,
+see `src/current_callback.erl`.
+
+```erlang
+request_complete(Operation, StartTimestamp, ConsumedCapacity) ->
+    statman_histogram:record_value({ddb, Operation}, StartTimestamp),
+    ok.
+```
+
+All calls to DynamoDB will have the `ReturnConsumedCapacity` value set
+to ```TOTAL``` by default. When DynamoDB returns the
+`ConsumedCapacity`, current will forward it to your callback
+module. Keep in mind that for batch requests it is a list containing
+capacity for one or more tables.
+
 
 ## Testing
 

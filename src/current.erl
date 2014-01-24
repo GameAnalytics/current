@@ -37,8 +37,30 @@
 
 %% Exported for testing
 -export([take_get_batch/2, take_write_batch/2]).
--export([request_complete/3, request_error/3]).
 -export([derived_key/1, canonical/2, string_to_sign/2, authorization/3]).
+
+
+%%
+%% TYPES
+%%
+
+-type target() :: [batch_get_item
+                   | batch_write_item
+                   | create_table
+                   | delete_table
+                   | delete_item
+                   | describe_table
+                   | get_item
+                   | list_tables
+                   | put_item
+                   | 'query'
+                   | scan
+                   | update_item
+                   | update_table
+                  ].
+-type request() :: {[tuple()]}.
+
+-export_type([target/0, request/0]).
 
 %%
 %% LOW-LEVEL API
@@ -336,6 +358,7 @@ do_scan({UserRequest}, Acc, Opts) ->
 %% INTERNALS
 %%
 
+-spec retry(target(), request(), [any()]) -> {ok, _} | {error, _}.
 retry(Op, Request, Opts) ->
     case proplists:is_defined(no_retry, Opts) of
         true ->
@@ -532,16 +555,6 @@ should_retry(max_concurrency)                                   -> true.
 
 
 %%
-%% Callbacks
-%%
-
-request_complete(_Operation, _Start, _Capacity) ->
-    ok.
-
-request_error(_Operation, _Start, _Reason) ->
-    ok.
-
-%%
 %% INTERNAL HELPERS
 %%
 
@@ -572,10 +585,5 @@ ymd(Now) ->
     io_lib:format("~4.10.0B~2.10.0B~2.10.0B", [Y, M, D]).
 
 callback_mod() ->
-    case application:get_env(current, callback_mod) of
-        {ok, Mod} ->
-            Mod;
-        undefined ->
-            throw(current_missing_callback_mod)
-    end.
+    application:get_env(current, callback_mod, current_callback).
 
