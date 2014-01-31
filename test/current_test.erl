@@ -342,7 +342,7 @@ key_derivation_test() ->
                  string:to_lower(hmac:hexlify(current:derived_key(Now)))).
 
 post_vanilla_test() ->
-    application:set_env(current, endpoint, <<"us-east-1">>),
+    application:set_env(current, region, <<"us-east-1">>),
     application:set_env(current, aws_host, <<"host">>),
     application:set_env(current, access_key, <<"AKIDEXAMPLE">>),
     application:set_env(current, secret_access_key,
@@ -403,7 +403,7 @@ setup() ->
     AccessKey = proplists:get_value(access_key, Cred),
     SecretAccessKey = proplists:get_value(secret_access_key, Cred),
 
-    application:set_env(current, endpoint, <<"us-east-1">>),
+    application:set_env(current, region, <<"us-east-1">>),
     application:set_env(current, access_key, AccessKey),
     application:set_env(current, secret_access_key, SecretAccessKey),
 

@@ -407,10 +407,9 @@ do(Operation, {UserRequest}, Opts) ->
 
     Body = jiffy:encode(Request),
 
-    URL = <<"http://dynamodb.", (endpoint())/binary, ".amazonaws.com/">>,
+    URL = <<"http://", (endpoint())/binary, "/">>,
     Headers = [
-               {<<"Host">>, <<"dynamodb.", (endpoint())/binary,
-                              ".amazonaws.com">>},
+               {<<"Host">>, endpoint()},
                {<<"Content-Type">>, <<"application/x-amz-json-1.0">>},
                {<<"x-amz-date">>, edatetime:iso8601(Now)},
                {<<"x-amz-target">>, target(Operation)}
@@ -495,14 +494,14 @@ canonical(Headers, Body) ->
 string_to_sign(HashedCanonicalRequest, Now) ->
     ["AWS4-HMAC-SHA256", "\n",
      binary_to_list(edatetime:iso8601_basic(Now)), "\n",
-     [ymd(Now), "/", endpoint(), "/", aws_host(), "/aws4_request"], "\n",
+     [ymd(Now), "/", region(), "/", aws_host(), "/aws4_request"], "\n",
      HashedCanonicalRequest].
 
 
 derived_key(Now) ->
     Secret = ["AWS4", secret_key()],
     Date = hmac:hmac256(Secret, ymd(Now)),
-    Region = hmac:hmac256(Date, endpoint()),
+    Region = hmac:hmac256(Date, region()),
     Service = hmac:hmac256(Region, aws_host()),
     hmac:hmac256(Service, "aws4_request").
 
@@ -516,7 +515,7 @@ signature(StringToSign, Now) ->
 
 
 credential(Now) ->
-    [access_key(), "/", ymd(Now), "/", endpoint(), "/", aws_host(), "/aws4_request"].
+    [access_key(), "/", ymd(Now), "/", region(), "/", aws_host(), "/aws4_request"].
 
 hexdigest(Body) ->
     to_lower(hmac:hexlify(erlsha2:sha256(Body))).
@@ -565,9 +564,17 @@ to_lower(List) ->
 
 
 
+region() ->
+    {ok, Region} = application:get_env(current, region),
+    Region.
+
 endpoint() ->
-    {ok, Endpoint} = application:get_env(current, endpoint),
-    Endpoint.
+    case application:get_env(current, endpoint) of
+        {ok, Endpoint} ->
+            Endpoint;
+        undefined ->
+            <<"dynamodb.", (region())/binary, ".amazonaws.com">>
+    end.
 
 aws_host() ->
     application:get_env(current, aws_host, <<"dynamodb">>).
