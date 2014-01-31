@@ -224,7 +224,18 @@ q() ->
           {<<"Limit">>, 10}]},
 
     {ok, ResultItems} = current:q(Q, []),
-    ?assertEqual(lists:sort(Items), lists:sort(ResultItems)).
+    ?assertEqual(lists:sort(Items), lists:sort(ResultItems)),
+
+    %% Count
+    CountQ = {[{<<"TableName">>, ?TABLE},
+               {<<"KeyConditions">>,
+                {[{<<"hash_key">>,
+                   {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
+                     {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
+               {<<"Limit">>, 10},
+               {<<"Select">>, <<"COUNT">>}]},
+    {ok, ResultCount} = current:q(CountQ, []),
+    ?assertEqual(100, ResultCount).
 
 
 

@@ -282,7 +282,7 @@ split_batch(N, [H | T], Acc) -> split_batch(N-1, T, [H | Acc]).
 %%
 
 do_query(Request, Opts) ->
-    do_query(Request, [], Opts).
+    do_query(Request, undefined, Opts).
 
 do_query({UserRequest}, Acc, Opts) ->
     ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
@@ -294,18 +294,33 @@ do_query({UserRequest}, Acc, Opts) ->
 
     Request = {ExclusiveStartKey ++ UserRequest},
 
+    IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
+    Accumulate = case IsCount of
+                     true ->
+                         fun (Count, undefined) -> Count;
+                             (Count, A) -> Count + A
+                         end;
+                     false ->
+                         fun (Items, undefined) -> Items;
+                             (Items, A) -> Items ++ A
+                         end
+                 end,
+
     case retry('query', Request, Opts) of
         {ok, {Response}} ->
-            Items = proplists:get_value(<<"Items">>, Response),
+            Result = case IsCount of
+                         true -> proplists:get_value(<<"Count">>, Response);
+                         false -> proplists:get_value(<<"Items">>, Response)
+                     end,
             case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
                 undefined ->
-                    {ok, Items ++ Acc};
+                    {ok, Accumulate(Result, Acc)};
                 LastEvaluatedKey ->
                     NextRequest = {lists:keystore(
                                      <<"ExclusiveStartKey">>, 1,
                                      UserRequest,
                                      {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
-                    do_query(NextRequest, Items ++ Acc, Opts)
+                    do_query(NextRequest, Accumulate(Result, Acc), Opts)
             end
     end.
 
