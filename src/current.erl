@@ -424,7 +424,7 @@ do(Operation, {UserRequest}, Opts) ->
     case party:post(URL, Signed, Body, [{server_timeout, ServerTimeout},
                                         {call_timeout, CallTimeout},
                                         {claim_timeout, ClaimTimeout}]) of
-        {ok, {{200, <<"OK">>}, _, ResponseBody}} ->
+        {ok, {{200, _}, _, ResponseBody}} ->
             {ok, jiffy:decode(ResponseBody)};
 
         {ok, {{Code, _}, _, ResponseBody}}
