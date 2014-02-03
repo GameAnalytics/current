@@ -321,7 +321,10 @@ do_query({UserRequest}, Acc, Opts) ->
                                      UserRequest,
                                      {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
                     do_query(NextRequest, Accumulate(Result, Acc), Opts)
-            end
+            end;
+
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 
@@ -360,7 +363,10 @@ do_scan({UserRequest}, Acc, Opts) ->
                                      UserRequest,
                                      {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
                     do_scan(NextRequest, Items ++ Acc, Opts)
-            end
+            end;
+
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 

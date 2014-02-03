@@ -145,7 +145,12 @@ scan() ->
 
     Q = {[{<<"TableName">>, ?TABLE}]},
 
-    ?assertMatch({ok, L} when is_list(L), current:scan(Q, [])).
+    ?assertMatch({ok, L} when is_list(L), current:scan(Q, [])),
+
+    %% Errors
+    ErrorQ = {[{<<"TableName">>, <<"non-existing-table">>}]},
+    ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
+                 current:scan(ErrorQ, [])).
 
 
 
@@ -235,7 +240,17 @@ q() ->
                {<<"Limit">>, 10},
                {<<"Select">>, <<"COUNT">>}]},
     {ok, ResultCount} = current:q(CountQ, []),
-    ?assertEqual(100, ResultCount).
+    ?assertEqual(100, ResultCount),
+
+    %% Errors
+    ErrorQ = {[{<<"TableName">>, <<"non-existing-table">>},
+               {<<"KeyConditions">>,
+                {[{<<"hash_key">>,
+                   {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
+                     {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
+               {<<"Limit">>, 10}]},
+    ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
+                 current:q(ErrorQ, [])).
 
 
 
