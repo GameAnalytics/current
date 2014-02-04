@@ -282,7 +282,7 @@ split_batch(N, [H | T], Acc) -> split_batch(N-1, T, [H | Acc]).
 %%
 
 do_query(Request, Opts) ->
-    do_query(Request, [], Opts).
+    do_query(Request, undefined, Opts).
 
 do_query({UserRequest}, Acc, Opts) ->
     ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
@@ -294,19 +294,37 @@ do_query({UserRequest}, Acc, Opts) ->
 
     Request = {ExclusiveStartKey ++ UserRequest},
 
+    IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
+    Accumulate = case IsCount of
+                     true ->
+                         fun (Count, undefined) -> Count;
+                             (Count, A) -> Count + A
+                         end;
+                     false ->
+                         fun (Items, undefined) -> Items;
+                             (Items, A) -> Items ++ A
+                         end
+                 end,
+
     case retry('query', Request, Opts) of
         {ok, {Response}} ->
-            Items = proplists:get_value(<<"Items">>, Response),
+            Result = case IsCount of
+                         true -> proplists:get_value(<<"Count">>, Response);
+                         false -> proplists:get_value(<<"Items">>, Response)
+                     end,
             case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
                 undefined ->
-                    {ok, Items ++ Acc};
+                    {ok, Accumulate(Result, Acc)};
                 LastEvaluatedKey ->
                     NextRequest = {lists:keystore(
                                      <<"ExclusiveStartKey">>, 1,
                                      UserRequest,
                                      {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
-                    do_query(NextRequest, Items ++ Acc, Opts)
-            end
+                    do_query(NextRequest, Accumulate(Result, Acc), Opts)
+            end;
+
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 
@@ -345,7 +363,10 @@ do_scan({UserRequest}, Acc, Opts) ->
                                      UserRequest,
                                      {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
                     do_scan(NextRequest, Items ++ Acc, Opts)
-            end
+            end;
+
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 
@@ -407,10 +428,9 @@ do(Operation, {UserRequest}, Opts) ->
 
     Body = jiffy:encode(Request),
 
-    URL = <<"http://dynamodb.", (endpoint())/binary, ".amazonaws.com/">>,
+    URL = <<"http://", (endpoint())/binary, "/">>,
     Headers = [
-               {<<"Host">>, <<"dynamodb.", (endpoint())/binary,
-                              ".amazonaws.com">>},
+               {<<"Host">>, endpoint()},
                {<<"Content-Type">>, <<"application/x-amz-json-1.0">>},
                {<<"x-amz-date">>, edatetime:iso8601(Now)},
                {<<"x-amz-target">>, target(Operation)}
@@ -425,7 +445,7 @@ do(Operation, {UserRequest}, Opts) ->
     case party:post(URL, Signed, Body, [{server_timeout, ServerTimeout},
                                         {call_timeout, CallTimeout},
                                         {claim_timeout, ClaimTimeout}]) of
-        {ok, {{200, <<"OK">>}, _, ResponseBody}} ->
+        {ok, {{200, _}, _, ResponseBody}} ->
             {ok, jiffy:decode(ResponseBody)};
 
         {ok, {{Code, _}, _, ResponseBody}}
@@ -495,14 +515,14 @@ canonical(Headers, Body) ->
 string_to_sign(HashedCanonicalRequest, Now) ->
     ["AWS4-HMAC-SHA256", "\n",
      binary_to_list(edatetime:iso8601_basic(Now)), "\n",
-     [ymd(Now), "/", endpoint(), "/", aws_host(), "/aws4_request"], "\n",
+     [ymd(Now), "/", region(), "/", aws_host(), "/aws4_request"], "\n",
      HashedCanonicalRequest].
 
 
 derived_key(Now) ->
     Secret = ["AWS4", secret_key()],
     Date = hmac:hmac256(Secret, ymd(Now)),
-    Region = hmac:hmac256(Date, endpoint()),
+    Region = hmac:hmac256(Date, region()),
     Service = hmac:hmac256(Region, aws_host()),
     hmac:hmac256(Service, "aws4_request").
 
@@ -516,7 +536,7 @@ signature(StringToSign, Now) ->
 
 
 credential(Now) ->
-    [access_key(), "/", ymd(Now), "/", endpoint(), "/", aws_host(), "/aws4_request"].
+    [access_key(), "/", ymd(Now), "/", region(), "/", aws_host(), "/aws4_request"].
 
 hexdigest(Body) ->
     to_lower(hmac:hexlify(erlsha2:sha256(Body))).
@@ -565,9 +585,17 @@ to_lower(List) ->
 
 
 
+region() ->
+    {ok, Region} = application:get_env(current, region),
+    Region.
+
 endpoint() ->
-    {ok, Endpoint} = application:get_env(current, endpoint),
-    Endpoint.
+    case application:get_env(current, endpoint) of
+        {ok, Endpoint} ->
+            Endpoint;
+        undefined ->
+            <<"dynamodb.", (region())/binary, ".amazonaws.com">>
+    end.
 
 aws_host() ->
     application:get_env(current, aws_host, <<"dynamodb">>).

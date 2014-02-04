@@ -145,7 +145,12 @@ scan() ->
 
     Q = {[{<<"TableName">>, ?TABLE}]},
 
-    ?assertMatch({ok, L} when is_list(L), current:scan(Q, [])).
+    ?assertMatch({ok, L} when is_list(L), current:scan(Q, [])),
+
+    %% Errors
+    ErrorQ = {[{<<"TableName">>, <<"non-existing-table">>}]},
+    ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
+                 current:scan(ErrorQ, [])).
 
 
 
@@ -224,7 +229,28 @@ q() ->
           {<<"Limit">>, 10}]},
 
     {ok, ResultItems} = current:q(Q, []),
-    ?assertEqual(lists:sort(Items), lists:sort(ResultItems)).
+    ?assertEqual(lists:sort(Items), lists:sort(ResultItems)),
+
+    %% Count
+    CountQ = {[{<<"TableName">>, ?TABLE},
+               {<<"KeyConditions">>,
+                {[{<<"hash_key">>,
+                   {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
+                     {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
+               {<<"Limit">>, 10},
+               {<<"Select">>, <<"COUNT">>}]},
+    {ok, ResultCount} = current:q(CountQ, []),
+    ?assertEqual(100, ResultCount),
+
+    %% Errors
+    ErrorQ = {[{<<"TableName">>, <<"non-existing-table">>},
+               {<<"KeyConditions">>,
+                {[{<<"hash_key">>,
+                   {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
+                     {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
+               {<<"Limit">>, 10}]},
+    ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
+                 current:q(ErrorQ, [])).
 
 
 
@@ -342,7 +368,7 @@ key_derivation_test() ->
                  string:to_lower(hmac:hexlify(current:derived_key(Now)))).
 
 post_vanilla_test() ->
-    application:set_env(current, endpoint, <<"us-east-1">>),
+    application:set_env(current, region, <<"us-east-1">>),
     application:set_env(current, aws_host, <<"host">>),
     application:set_env(current, access_key, <<"AKIDEXAMPLE">>),
     application:set_env(current, secret_access_key,
@@ -403,7 +429,7 @@ setup() ->
     AccessKey = proplists:get_value(access_key, Cred),
     SecretAccessKey = proplists:get_value(secret_access_key, Cred),
 
-    application:set_env(current, endpoint, <<"us-east-1">>),
+    application:set_env(current, region, <<"us-east-1">>),
     application:set_env(current, access_key, AccessKey),
     application:set_env(current, secret_access_key, SecretAccessKey),
 
