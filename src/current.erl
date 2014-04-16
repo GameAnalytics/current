@@ -499,7 +499,7 @@ authorization(Headers, Body, Now) ->
 
     StringToSign = string_to_sign(HashedCanonicalRequest, Now),
 
-    lists:flatten(
+    iolist_to_binary(
       ["AWS4-HMAC-SHA256 ",
        "Credential=", credential(Now), ", ",
        "SignedHeaders=", string:join([to_lower(K)
@@ -574,6 +574,8 @@ should_retry({<<"InvalidSignatureException">>, _})              -> false;
 should_retry({<<"SerializationException">>, _})                 -> false;
 should_retry({<<"InternalServerError">>, _})                    -> true;
 should_retry({<<"ConditionalCheckFailedException">>, _})        -> false;
+should_retry({<<"AccessDeniedException">>, _})                  -> false;
+should_retry({<<"ServiceUnavailableException">>, _})            -> true;
 should_retry({Code, _}) when Code >= 500                        -> true;
 should_retry({Code, _}) when Code < 500                         -> false;
 should_retry(timeout)                                           -> true;
