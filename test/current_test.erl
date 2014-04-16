@@ -17,7 +17,8 @@ current_test_() ->
       {timeout, 20, ?_test(get_put_update_delete())},
       {timeout, 10, ?_test(retry_with_timeout())},
       {timeout, 10, ?_test(timeout())},
-      {timeout, 10, ?_test(throttled())}
+      {timeout, 10, ?_test(throttled())},
+      {timeout, 10, ?_test(non_json_error())}
      ]}.
 
 
@@ -348,6 +349,21 @@ throttled() ->
                     ]},
 
     ?assertEqual(ok, current:batch_write_item(WriteRequest, [{retries, 3}])),
+
+    meck:unload(party).
+
+non_json_error() ->
+    meck:new(party, [passthrough]),
+    PartyResponse = {ok, {{413, ""}, [], <<"not a json response!">>}},
+    meck:expect(party, post, 4, PartyResponse),
+
+    Key = {[{<<"hash_key">>, ?NUMBER(1)},
+            {<<"range_key">>, ?NUMBER(1)}]},
+    Response = current:get_item({[{<<"TableName">>, ?TABLE},
+                                  {<<"Key">>, Key}]}),
+
+    ?assertEqual({error, {413, <<"not a json response!">>}},
+                 Response),
 
     meck:unload(party).
 

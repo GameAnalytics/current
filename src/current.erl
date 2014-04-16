@@ -450,23 +450,30 @@ do(Operation, {UserRequest}, Opts) ->
 
         {ok, {{Code, _}, _, ResponseBody}}
           when 400 =< Code andalso Code =< 599 ->
-            {Response} = jiffy:decode(ResponseBody),
-            Type = case proplists:get_value(<<"__type">>, Response) of
-                       <<"com.amazonaws.dynamodb.v20120810#", T/binary>> ->
-                           T;
-                       <<"com.amazon.coral.validate#", T/binary>> ->
-                           T;
-                       <<"com.amazon.coral.service#", T/binary>> ->
-                           T
-                   end,
-            Message = case proplists:get_value(<<"message">>, Response) of
-                          undefined ->
-                              %% com.amazon.coral.service#SerializationException
-                              proplists:get_value(<<"Message">>, Response);
-                          M ->
-                              M
-                      end,
-            {error, {Type, Message}};
+            try
+                {Response} = jiffy:decode(ResponseBody),
+                Type = case proplists:get_value(<<"__type">>, Response) of
+                           <<"com.amazonaws.dynamodb.v20120810#", T/binary>> ->
+                               T;
+                           <<"com.amazon.coral.validate#", T/binary>> ->
+                               T;
+                           <<"com.amazon.coral.service#", T/binary>> ->
+                               T
+                       end,
+                Message = case proplists:get_value(<<"message">>, Response) of
+                              undefined ->
+                                  %% com.amazon.coral.service#SerializationException
+                                  proplists:get_value(<<"Message">>, Response);
+                              M ->
+                                  M
+                          end,
+                {error, {Type, Message}}
+            catch
+                throw:{error, {Line, Reason}} when is_integer(Line),
+                                                   is_atom(Reason) ->
+                    %% json decoding failed, return raw error response
+                    {error, {Code, ResponseBody}}
+            end;
 
         {error, Reason} ->
             {error, Reason}
@@ -567,6 +574,8 @@ should_retry({<<"InvalidSignatureException">>, _})              -> false;
 should_retry({<<"SerializationException">>, _})                 -> false;
 should_retry({<<"InternalServerError">>, _})                    -> true;
 should_retry({<<"ConditionalCheckFailedException">>, _})        -> false;
+should_retry({Code, _}) when Code >= 500                        -> true;
+should_retry({Code, _}) when Code < 500                         -> false;
 should_retry(timeout)                                           -> true;
 should_retry(claim_timeout)                                     -> true;
 should_retry(busy)                                              -> true;
