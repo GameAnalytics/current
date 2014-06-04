@@ -411,7 +411,9 @@ retry(Op, Request, Retries, Start, Opts) ->
                         true ->
                             {error, max_retries};
                         false ->
-                            timer:sleep(trunc(math:pow(2, Retries) * 50)),
+                            BackoffTime = min(max_backoff(Opts),
+                                              trunc(math:pow(2, Retries) * 50)),
+                            timer:sleep(BackoffTime),
                             retry(Op, Request, Retries+1, Start, Opts)
                     end;
                 false ->
@@ -480,8 +482,9 @@ do(Operation, {UserRequest}, Opts) ->
     end.
 
 
-timeout(Opts) -> proplists:get_value(timeout, Opts, 5000).
-retries(Opts) -> proplists:get_value(retries, Opts, 3).
+timeout(Opts)     -> proplists:get_value(timeout, Opts, 5000).
+retries(Opts)     -> proplists:get_value(retries, Opts, 3).
+max_backoff(Opts) -> proplists:get_value(max_backoff, Opts, 60000).
 
 
 %%
