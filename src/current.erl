@@ -101,14 +101,14 @@ update_table(Request, Opts)     -> retry(update_table, Request, Opts).
 %%
 
 wait_for_active(Table, Timeout) ->
-    case describe_table({[{<<"TableName">>, Table}]}, [{timeout, Timeout}]) of
-        {ok, {[{<<"Table">>, {Description}}]}} ->
-            case proplists:get_value(<<"TableStatus">>, Description) of
-                <<"ACTIVE">> ->
+    case describe_table(#{<<"TableName">> => Table}, [{timeout, Timeout}]) of
+        {ok, #{<<"Table">> := Description}} ->
+            case maps:find(<<"TableStatus">>, Description) of
+                {ok, <<"ACTIVE">>} ->
                     ok;
-                <<"DELETING">> ->
+                {ok, <<"DELETING">>} ->
                     {error, deleting};
-                _Other ->
+                _ ->
                     wait_for_active(Table, Timeout)
             end;
         {error, {<<"ResourceNotFoundException">>, _}} ->
@@ -117,10 +117,10 @@ wait_for_active(Table, Timeout) ->
 
 
 wait_for_delete(Table, Timeout) ->
-    case describe_table({[{<<"TableName">>, Table}]}, [{timeout, Timeout}]) of
-        {ok, {[{<<"Table">>, {Description}}]}} ->
-            case proplists:get_value(<<"TableStatus">>, Description) of
-                <<"DELETING">> ->
+    case describe_table(#{<<"TableName">> => Table}, [{timeout, Timeout}]) of
+        {ok, #{<<"Table">> := Description}} ->
+            case maps:find(<<"TableStatus">>, Description) of
+                {ok, <<"DELETING">>} ->
                     wait_for_delete(Table, Timeout);
                 Other ->
                     {error, {unexpected_state, Other}}
@@ -143,45 +143,36 @@ wait_for_delete(Table, Timeout) ->
 
 
 do_batch_get_item(Request, Opts) ->
-    case do_batch_get_item(Request, [], Opts) of
+    case do_batch_get_item(Request, #{}, Opts) of
         {error, Reason} ->
             {error, Reason};
         Result ->
-            {ok, lists:reverse(Result)}
+            {ok, Result}
     end.
 
 
-do_batch_get_item({Request}, Acc, Opts) ->
-    {value, {<<"RequestItems">>, RequestItems}, CleanRequest} =
-        lists:keytake(<<"RequestItems">>, 1, Request),
-
+do_batch_get_item(#{<<"RequestItems">> := RequestItems} = Request, Acc, Opts) ->
+    CleanRequest = maps:without([<<"RequestItems">>], Request),
     case take_get_batch(RequestItems, 100) of
-        {[], []} ->
+        {0, #{}, #{}} ->
             Acc;
-        {Batch, Rest} ->
-            BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
-
+        {_BatchSize, Batch, Rest} ->
+            BatchRequest = CleanRequest#{<<"RequestItems">> => Batch},
             case retry(batch_get_item, BatchRequest, Opts) of
-                {ok, {Result}} ->
-                    {Responses} = proplists:get_value(<<"Responses">>, Result),
-                    NewAcc = orddict:merge(fun (_, Left, Right) -> Left ++ Right end,
-                                           orddict:from_list(Responses),
-                                           orddict:from_list(Acc)),
+                {ok, Result} ->
+                    NewAcc = merge_map(fun (A, B) -> A ++ B end,
+                                       Acc,
+                                       maps:get(<<"Responses">>, Result)),
 
-                    {Unprocessed} = proplists:get_value(<<"UnprocessedKeys">>, Result),
-                    Remaining = orddict:merge(
-                                  fun (_, {Left}, {Right}) ->
-                                          LeftKeys = proplists:get_value(
-                                                       <<"Keys">>, Left),
-                                          RightKeys = proplists:get_value(
-                                                        <<"Keys">>, Right),
-                                          {lists:keystore(
-                                             <<"Keys">>, 1, Right,
-                                             {<<"Keys">>, LeftKeys ++ RightKeys})}
-                                  end,
-                                  orddict:from_list(Unprocessed),
-                                  orddict:from_list(Rest)),
-                    do_batch_get_item({[{<<"RequestItems">>, {Remaining}}]},
+                    Unprocessed = maps:get(<<"UnprocessedKeys">>, Result),
+                    Remaining = merge_map(fun (A, B) ->
+                                                  B#{<<"Keys">> =>
+                                                         maps:get(<<"Keys">>, A) ++
+                                                         maps:get(<<"Keys">>, B)}
+                                          end,
+                                          Rest, Unprocessed),
+
+                    do_batch_get_item(#{<<"RequestItems">> => Remaining},
                                       NewAcc, Opts);
                 {error, _} = Error ->
                     Error
@@ -189,83 +180,85 @@ do_batch_get_item({Request}, Acc, Opts) ->
     end.
 
 
-do_batch_write_item({Request}, Opts) ->
-    {value, {<<"RequestItems">>, RequestItems}, CleanRequest} =
-        lists:keytake(<<"RequestItems">>, 1, Request),
+do_batch_write_item(#{<<"RequestItems">> := RequestItems} = Request, Opts) ->
+    CleanRequest = maps:without([<<"RequestItems">>], Request),
 
     case take_write_batch(RequestItems, 25) of
-        {[], []} ->
+        {_, [], []} ->
             ok;
-        {Batch, Rest} ->
-            BatchRequest = {[{<<"RequestItems">>, {Batch}} | CleanRequest]},
+        {_BatchSize, Batch, Rest} ->
+            BatchRequest = CleanRequest#{<<"RequestItems">> => Batch},
 
             case retry(batch_write_item, BatchRequest, Opts) of
-                {ok, {Result}} ->
-                    {Unprocessed} = proplists:get_value(<<"UnprocessedItems">>, Result),
-                    case Unprocessed =:= [] andalso Rest =:= [] of
+                {ok, #{<<"UnprocessedItems">> := Unprocessed} = _Result} ->
+                    case Unprocessed =:= #{} andalso Rest =:= #{} of
                         true ->
                             ok;
                         false ->
-                            Remaining = orddict:merge(fun (_, Left, Right) ->
-                                                              Left ++ Right
-                                                      end,
-                                                      orddict:from_list(Unprocessed),
-                                                      orddict:from_list(Rest)),
-
-                            do_batch_write_item({[{<<"RequestItems">>, {Remaining}}]}, Opts)
+                            Remaining = merge_map(fun (A, B) -> A ++ B end,
+                                                  Unprocessed, Rest),
+                            NextRequest = CleanRequest#{<<"RequestItems">> => Remaining},
+                            do_batch_write_item(NextRequest, Opts)
                     end;
                 {error, _} = Error ->
                     Error
             end
     end.
 
+merge_map(F, Small, Big) ->
+    maps:fold(fun (SmallK, SmallV, BigAcc) ->
+                     case maps:find(SmallK, BigAcc) of
+                         {ok, BigV} ->
+                             maps:put(SmallK, F(SmallV, BigV), BigAcc);
+                         error ->
+                             BigAcc
+                     end
+             end, Big, Small).
 
-take_get_batch({RequestItems}, MaxItems) ->
-    do_take_get_batch(RequestItems, 0, MaxItems, []).
+take_get_batch(RequestItems, MaxItems) ->
+    try
+        maps:fold(
+          fun (Table, #{<<"Keys">> := Keys} = Spec, {N, Acc, Remaining}) ->
+                  N =< MaxItems orelse throw({return, N, Acc, Remaining}),
 
-do_take_get_batch(Remaining, MaxItems, MaxItems, Acc) ->
-    {lists:reverse(Acc), Remaining};
+                  {Batch, Rest} = split_batch(MaxItems - N, Keys, []),
 
-do_take_get_batch([], _, _, Acc) ->
-    {lists:reverse(Acc), []};
-
-do_take_get_batch([{Table, {Spec}} | RemainingTables], N, MaxItems, Acc) ->
-    case lists:keyfind(<<"Keys">>, 1, Spec) of
-        {<<"Keys">>, []} ->
-            do_take_get_batch(RemainingTables, N, MaxItems, Acc);
-        {<<"Keys">>, Keys} ->
-            {Batch, Rest} = split_batch(MaxItems - N, Keys, []),
-            BatchSpec = lists:keystore(<<"Keys">>, 1, Spec, {<<"Keys">>, Batch}),
-            RestSpec = lists:keystore(<<"Keys">>, 1, Spec, {<<"Keys">>, Rest}),
-            do_take_get_batch([{Table, {RestSpec}} | RemainingTables],
-                              N + length(Batch),
-                              MaxItems,
-                              [{Table, {BatchSpec}} | Acc])
+                  {N + length(Batch),
+                   case Batch =:= [] of
+                       true -> Acc;
+                       false -> maps:put(Table, Spec#{<<"Keys">> => Batch}, Acc)
+                   end,
+                   case Rest =:= [] of
+                       true -> Remaining;
+                       false -> maps:put(Table, Spec#{<<"Keys">> => Rest}, Remaining)
+                   end}
+          end, {0, #{}, #{}}, RequestItems)
+    catch
+        throw:{return, N, Acc, Remaining} ->
+            {N, Acc, Remaining}
     end.
 
 
+take_write_batch(RequestItems, MaxItems) ->
+    try
+        maps:fold(fun (Table, Requests, {N, Acc, Remaining}) ->
+                          N =< MaxItems orelse throw({return, N, Acc, Remaining}),
+                          {Batch, Rest} = split_batch(MaxItems -N, Requests, []),
+                          {N + length(Batch),
+                           case Batch =:= [] of
+                               true -> Acc;
+                               false -> maps:put(Table, Batch, Acc)
+                           end,
+                           case Rest =:= [] of
+                               true -> Remaining;
+                               false -> maps:put(Table, Rest, Remaining)
+                           end}
+                  end, {0, #{}, #{}}, RequestItems)
+    catch
+        throw:{return, N, Acc, Remaining} ->
+            {N, Acc, Remaining}
+    end.
 
-take_write_batch({RequestItems}, MaxItems) ->
-    %% TODO: Validate item size
-    %% TODO: Chunk on 1MB request size
-    do_take_write_batch(RequestItems, 0, MaxItems, []).
-
-do_take_write_batch([{_, []} | RemainingTables], N, MaxItems, Acc) ->
-    do_take_write_batch(RemainingTables, N, MaxItems, Acc);
-
-do_take_write_batch(Remaining, MaxItems, MaxItems, Acc) ->
-    {lists:reverse(Acc), Remaining};
-
-do_take_write_batch([], _, _, Acc) ->
-    {lists:reverse(Acc), []};
-
-do_take_write_batch([{Table, Requests} | RemainingTables], N, MaxItems, Acc) ->
-    {Batch, Rest} = split_batch(MaxItems - N, Requests, []),
-
-    do_take_write_batch([{Table, Rest} | RemainingTables],
-                        N + length(Batch),
-                        MaxItems,
-                        [{Table, Batch} | Acc]).
 
 
 split_batch(0, T, Acc)       -> {lists:reverse(Acc), T};
@@ -284,17 +277,10 @@ split_batch(N, [H | T], Acc) -> split_batch(N-1, T, [H | Acc]).
 do_query(Request, Opts) ->
     do_query(Request, undefined, Opts).
 
-do_query({UserRequest}, Acc, Opts) ->
-    ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
-                            undefined ->
-                                [];
-                            StartKey ->
-                                [{<<"ExclusiveStartKey">>, StartKey}]
-                        end,
+do_query(UserRequest, Acc, Opts) ->
+    Request = UserRequest,
 
-    Request = {ExclusiveStartKey ++ UserRequest},
-
-    IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
+    IsCount = maps:find(<<"Select">>, UserRequest) =:= {ok, <<"COUNT">>},
     Accumulate = case IsCount of
                      true ->
                          fun (Count, undefined) -> Count;
@@ -307,28 +293,22 @@ do_query({UserRequest}, Acc, Opts) ->
                  end,
 
     case retry('query', Request, Opts) of
-        {ok, {Response}} ->
+        {ok, Response} ->
             Result = case IsCount of
-                         true -> proplists:get_value(<<"Count">>, Response);
-                         false -> proplists:get_value(<<"Items">>, Response)
+                         true -> maps:get(<<"Count">>, Response);
+                         false -> maps:get(<<"Items">>, Response)
                      end,
-            case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
-                undefined ->
-                    {ok, Accumulate(Result, Acc)};
-                LastEvaluatedKey ->
-                    NextRequest = {lists:keystore(
-                                     <<"ExclusiveStartKey">>, 1,
-                                     UserRequest,
-                                     {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
-                    do_query(NextRequest, Accumulate(Result, Acc), Opts)
+            case maps:find(<<"LastEvaluatedKey">>, Response) of
+                {ok, LastEvaluatedKey} ->
+                    NextRequest = UserRequest#{<<"ExclusiveStartKey">> => LastEvaluatedKey},
+                    do_query(NextRequest, Accumulate(Result, Acc), Opts);
+                error ->
+                    {ok, Accumulate(Result, Acc)}
             end;
 
         {error, Reason} ->
             {error, Reason}
     end.
-
-
-
 
 
 
@@ -341,28 +321,16 @@ do_query({UserRequest}, Acc, Opts) ->
 do_scan(Request, Opts) ->
     do_scan(Request, [], Opts).
 
-do_scan({UserRequest}, Acc, Opts) ->
-    ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
-                            undefined ->
-                                [];
-                            StartKey ->
-                                [{<<"ExclusiveStartKey">>, StartKey}]
-                        end,
+do_scan(UserRequest, Acc, Opts) ->
+    case retry(scan, UserRequest, Opts) of
+        {ok, #{<<"Items">> := Items} = Response} ->
+            case maps:find(<<"LastEvaluatedKey">>, Response) of
+                {ok, LastEvaluatedKey} ->
+                    NextRequest = UserRequest#{<<"ExclusiveStartKey">> => LastEvaluatedKey},
+                    do_scan(NextRequest, Items ++ Acc, Opts);
+                error ->
+                    {ok, Items ++ Acc}
 
-    Request = {ExclusiveStartKey ++ UserRequest},
-
-    case retry(scan, Request, Opts) of
-        {ok, {Response}} ->
-            Items = proplists:get_value(<<"Items">>, Response, []),
-            case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
-                undefined ->
-                    {ok, Items ++ Acc};
-                LastEvaluatedKey ->
-                    NextRequest = {lists:keystore(
-                                     <<"ExclusiveStartKey">>, 1,
-                                     UserRequest,
-                                     {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
-                    do_scan(NextRequest, Items ++ Acc, Opts)
             end;
 
         {error, Reason} ->
@@ -392,12 +360,10 @@ retry(Op, Request, Retries, Start, Opts) ->
     RequestStart = os:timestamp(),
     case do(Op, Request, Opts) of
         {ok, Response} ->
-
-            case proplists:get_value(<<"ConsumedCapacity">>,
-                                     element(1, Response)) of
-                undefined -> ok;
-                Capacity  -> catch (callback_mod()):request_complete(
-                                     Op, RequestStart, Capacity)
+            case maps:find(<<"ConsumedCapacity">>, Response) of
+                {ok, Capacity}  -> catch (callback_mod()):request_complete(
+                                     Op, RequestStart, Capacity);
+                error -> ok
             end,
 
             {ok, Response};
@@ -422,13 +388,11 @@ retry(Op, Request, Retries, Start, Opts) ->
     end.
 
 
-do(Operation, {UserRequest}, Opts) ->
+do(Operation, UserRequest, Opts) ->
     Now = edatetime:now2ts(),
+    Request = UserRequest#{<<"ReturnConsumedCapacity">> => <<"TOTAL">>},
 
-    Request = {lists:keystore(<<"ReturnConsumedCapacity">>, 1, UserRequest,
-                              {<<"ReturnConsumedCapacity">>, <<"TOTAL">>})},
-
-    Body = jiffy:encode(Request),
+    Body = jiffy:encode(Request, jiffy_encode_options(Opts)),
 
     URL = <<"http://", (endpoint())/binary, "/">>,
     Headers = [
@@ -448,7 +412,7 @@ do(Operation, {UserRequest}, Opts) ->
                                         {call_timeout, CallTimeout},
                                         {claim_timeout, ClaimTimeout}]) of
         {ok, {{200, _}, _, ResponseBody}} ->
-            {ok, jiffy:decode(ResponseBody)};
+            {ok, jiffy:decode(ResponseBody, jiffy_decode_options(Opts))};
 
         {ok, {{Code, _}, _, ResponseBody}}
           when 400 =< Code andalso Code =< 599 ->
@@ -482,9 +446,12 @@ do(Operation, {UserRequest}, Opts) ->
     end.
 
 
-timeout(Opts)     -> proplists:get_value(timeout, Opts, 5000).
-retries(Opts)     -> proplists:get_value(retries, Opts, 3).
-max_backoff(Opts) -> proplists:get_value(max_backoff, Opts, 60000).
+timeout(Opts)              -> proplists:get_value(timeout, Opts, 5000).
+retries(Opts)              -> proplists:get_value(retries, Opts, 3).
+max_backoff(Opts)          -> proplists:get_value(max_backoff, Opts, 60000).
+jiffy_decode_options(Opts) -> [return_maps |
+                               proplists:get_value(jiffy_decode_options, Opts, [])].
+jiffy_encode_options(Opts) -> proplists:get_value(jiffy_encode_options, Opts, []).
 
 
 %%
