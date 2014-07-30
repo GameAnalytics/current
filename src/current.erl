@@ -551,6 +551,7 @@ should_retry({Code, _}) when Code < 500                         -> false;
 should_retry(timeout)                                           -> true;
 should_retry(claim_timeout)                                     -> true;
 should_retry(busy)                                              -> true;
+should_retry(econnrefused)                                      -> true;
 should_retry(max_concurrency)                                   -> true.
 
 
