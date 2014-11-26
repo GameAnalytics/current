@@ -184,7 +184,7 @@ do_batch_write_item(#{<<"RequestItems">> := RequestItems} = Request, Opts) ->
     CleanRequest = maps:without([<<"RequestItems">>], Request),
 
     case take_write_batch(RequestItems, 25) of
-        {_, [], []} ->
+        {0, _, #{}} ->
             ok;
         {_BatchSize, Batch, Rest} ->
             BatchRequest = CleanRequest#{<<"RequestItems">> => Batch},
@@ -275,20 +275,20 @@ split_batch(N, [H | T], Acc) -> split_batch(N-1, T, [H | Acc]).
 %%
 
 do_query(Request, Opts) ->
-    do_query(Request, undefined, Opts).
+    do_query(Request, {undefined, 0}, Opts).
 
-do_query(UserRequest, Acc, Opts) ->
+do_query(UserRequest, {Acc, AccLen}, Opts) ->
     Request = UserRequest,
 
     IsCount = maps:find(<<"Select">>, UserRequest) =:= {ok, <<"COUNT">>},
     Accumulate = case IsCount of
                      true ->
-                         fun (Count, undefined) -> Count;
-                             (Count, A) -> Count + A
+                         fun (Count, {undefined, _}) -> {Count, Count};
+                             (Count, {A, _}) -> {Count + A, Count + A}
                          end;
                      false ->
-                         fun (Items, undefined) -> Items;
-                             (Items, A) -> Items ++ A
+                         fun (Items, {undefined, _}) -> {Items, length(Items)};
+                             (Items, {A, Len}) -> {Items ++ A, Len + length(Items)}
                          end
                  end,
 
@@ -300,10 +300,16 @@ do_query(UserRequest, Acc, Opts) ->
                      end,
             case maps:find(<<"LastEvaluatedKey">>, Response) of
                 {ok, LastEvaluatedKey} ->
-                    NextRequest = UserRequest#{<<"ExclusiveStartKey">> => LastEvaluatedKey},
-                    do_query(NextRequest, Accumulate(Result, Acc), Opts);
+                    case proplists:get_value(max_items, Opts, infinity) > AccLen of
+                        true ->
+                            NextRequest = UserRequest#{<<"ExclusiveStartKey">> => LastEvaluatedKey},
+                            do_query(NextRequest, Accumulate(Result, {Acc, AccLen}), Opts);
+                        false ->
+                            {ok, Acc}
+                    end;
                 error ->
-                    {ok, Accumulate(Result, Acc)}
+                    {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
+                    {ok, ResultAcc}
             end;
 
         {error, Reason} ->

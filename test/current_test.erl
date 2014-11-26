@@ -11,7 +11,7 @@ current_test_() ->
      [
       {timeout, 120, ?_test(table_manipulation())},
       {timeout, 10, ?_test(batch_get_write_item())},
-%%      {timeout, 30, ?_test(batch_get_unprocessed_items())}
+      %%{timeout, 30, ?_test(batch_get_unprocessed_items())},
       {timeout, 10, ?_test(scan())},
       {timeout, 30, ?_test(q())},
       {timeout, 30, ?_test(get_put_update_delete())},
@@ -215,13 +215,13 @@ q() ->
              || I <- lists:seq(1, 100)],
 
     RequestItems = [begin
-                        {[{<<"PutRequest">>, {[{<<"Item">>, Item}]}}]}
+                        #{<<"PutRequest">> => #{<<"Item">> => Item}}
                     end || Item <- Items],
     Request = #{<<"RequestItems">> => #{?TABLE => RequestItems}},
-
     ok = current:batch_write_item(Request, []),
 
     Q = #{<<"TableName">> => ?TABLE,
+          <<"ConsistentRead">> => true,
           <<"KeyConditions">> =>
               #{<<"hash_key">> =>
                     #{<<"AttributeValueList">> => [#{<<"N">> => <<"1">>}],
@@ -229,6 +229,7 @@ q() ->
           <<"Limit">> => 10},
 
     {ok, ResultItems} = current:q(Q),
+    ?assertEqual(length(ResultItems), length(Items)),
     ?assertEqual(lists:sort(Items), lists:sort(ResultItems)),
 
     %% Count
@@ -250,7 +251,11 @@ q() ->
                            <<"ComparisonOperator">> => <<"EQ">>}},
                <<"Limit">> => 10},
     ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
-                 current:q(ErrorQ, [])).
+                 current:q(ErrorQ, [])),
+
+    %% Item limit
+    {ok, LimitedItems} = current:q(Q, [{max_items, 10}]),
+    ?assertEqual(10, length(LimitedItems)).
 
 
 
@@ -489,7 +494,7 @@ clear_table(Name) ->
         {ok, Items} ->
             RequestItems = [#{<<"DeleteRequest">> => #{<<"Key">> => Item}}
                             || Item <- Items],
-            Request = #{<<"RequestItems">> => maps:put(Name, RequestItems, #{}),
-                        <<"AttributesToGet">> => [<<"hash_key">>, <<"range_key">>]},
-            ok = current:batch_write_item(Request, [])
+            Request = #{<<"RequestItems">> => maps:put(Name, RequestItems, #{})},
+            current:batch_write_item(Request, [])
+
     end.
