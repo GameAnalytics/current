@@ -10,15 +10,15 @@ current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
       {timeout, 120, ?_test(table_manipulation())},
-      {timeout, 10, ?_test(batch_get_write_item())},
-      {timeout, 10, ?_test(batch_get_unprocessed_items())},
-      {timeout, 10, ?_test(scan())},
-      {timeout, 20, ?_test(q())},
-      {timeout, 20, ?_test(get_put_update_delete())},
-      {timeout, 10, ?_test(retry_with_timeout())},
-      {timeout, 10, ?_test(timeout())},
-      {timeout, 10, ?_test(throttled())},
-      {timeout, 10, ?_test(non_json_error())}
+      {timeout, 30, ?_test(batch_get_write_item())},
+      {timeout, 30, ?_test(batch_get_unprocessed_items())},
+      {timeout, 30, ?_test(scan())},
+      {timeout, 30, ?_test(q())},
+      {timeout, 30, ?_test(get_put_update_delete())},
+      {timeout, 30, ?_test(retry_with_timeout())},
+      {timeout, 30, ?_test(timeout())},
+      {timeout, 30, ?_test(throttled())},
+      {timeout, 30, ?_test(non_json_error())}
      ]}.
 
 
@@ -44,10 +44,12 @@ table_manipulation() ->
 
 batch_get_write_item() ->
     ok = create_table(?TABLE),
+    ok = clear_table(?TABLE),
     ok = create_table(<<"current_test_other_table">>),
+    ok = clear_table(<<"current_test_other_table">>),
 
-    Keys = [{[{<<"hash_key">>, ?NUMBER(random:uniform(100000))},
-              {<<"range_key">>, ?NUMBER(random:uniform(1000))}]}
+    Keys = [{[{<<"range_key">>, ?NUMBER(random:uniform(1000))},
+              {<<"hash_key">>, ?NUMBER(random:uniform(100000))}]}
             || _ <- lists:seq(1, 50)],
 
     WriteRequestItems = [{[{<<"PutRequest">>, {[{<<"Item">>, Key}]}}]}
@@ -66,7 +68,7 @@ batch_get_write_item() ->
                    }]},
 
     {ok, [{?TABLE, Table1}, {<<"current_test_other_table">>, Table2}]} =
-        current:batch_get_item(GetRequest, []),
+        current:batch_get_item(GetRequest),
 
     ?assertEqual(lists:sort(Keys), lists:sort(Table1)),
     ?assertEqual(lists:sort(Keys), lists:sort(Table2)).
@@ -76,8 +78,8 @@ batch_get_unprocessed_items() ->
     ok = create_table(?TABLE),
     ok = create_table(<<"current_test_other_table">>),
 
-    Keys = [{[{<<"hash_key">>, ?NUMBER(random:uniform(100000))},
-              {<<"range_key">>, ?NUMBER(random:uniform(1000))}]}
+    Keys = [{[{<<"range_key">>, ?NUMBER(random:uniform(1000))},
+              {<<"hash_key">>, ?NUMBER(random:uniform(100000))}]}
             || _ <- lists:seq(1, 150)],
 
     WriteRequestItems = [{[{<<"PutRequest">>, {[{<<"Item">>, Key}]}}]}
@@ -211,8 +213,8 @@ q() ->
     ok = create_table(?TABLE),
     ok = clear_table(?TABLE),
 
-    Items = [{[{<<"hash_key">>, {[{<<"N">>, <<"1">>}]}},
-               {<<"range_key">>, {[{<<"N">>, ?i2b(I)}]}}]}
+    Items = [{[{<<"range_key">>, {[{<<"N">>, ?i2b(I)}]}},
+               {<<"hash_key">>, {[{<<"N">>, <<"1">>}]}}]}
              || I <- lists:seq(1, 100)],
 
     RequestItems = [begin
@@ -251,7 +253,11 @@ q() ->
                      {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
                {<<"Limit">>, 10}]},
     ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
-                 current:q(ErrorQ, [])).
+                 current:q(ErrorQ, [])),
+
+    %% Limit
+    {ok, LimitedItems} = current:q(Q, [{max_items, 10}]),
+    ?assertEqual(10, length(LimitedItems)).
 
 
 
@@ -498,5 +504,6 @@ clear_table(Name) ->
                          {[{Name, RequestItems}]}},
                         {<<"AttributesToGet">>, [<<"hash_key">>, <<"range_key">>]}
                        ]},
-            ok = current:batch_write_item(Request, [])
+            ok = current:batch_write_item(Request, []),
+            clear_table(Name)
     end.

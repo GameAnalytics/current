@@ -282,9 +282,9 @@ split_batch(N, [H | T], Acc) -> split_batch(N-1, T, [H | Acc]).
 %%
 
 do_query(Request, Opts) ->
-    do_query(Request, undefined, Opts).
+    do_query(Request, {undefined, 0}, Opts).
 
-do_query({UserRequest}, Acc, Opts) ->
+do_query({UserRequest}, {Acc, AccLen}, Opts) ->
     ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
                             undefined ->
                                 [];
@@ -297,12 +297,12 @@ do_query({UserRequest}, Acc, Opts) ->
     IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
     Accumulate = case IsCount of
                      true ->
-                         fun (Count, undefined) -> Count;
-                             (Count, A) -> Count + A
+                         fun (Count, {undefined, _}) -> {Count, Count};
+                             (Count, {A, _}) -> {Count + A, Count + A}
                          end;
                      false ->
-                         fun (Items, undefined) -> Items;
-                             (Items, A) -> Items ++ A
+                         fun (Items, {undefined, _}) -> {Items, length(Items)};
+                             (Items, {A, Len}) -> {Items ++ A, Len + length(Items)}
                          end
                  end,
 
@@ -314,13 +314,20 @@ do_query({UserRequest}, Acc, Opts) ->
                      end,
             case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
                 undefined ->
-                    {ok, Accumulate(Result, Acc)};
+                    {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
+                    {ok, ResultAcc};
                 LastEvaluatedKey ->
-                    NextRequest = {lists:keystore(
-                                     <<"ExclusiveStartKey">>, 1,
-                                     UserRequest,
-                                     {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
-                    do_query(NextRequest, Accumulate(Result, Acc), Opts)
+                    {NewAcc, NewLen} = Accumulate(Result, {Acc, AccLen}),
+                    case proplists:get_value(max_items, Opts, infinity) > NewLen of
+                        true ->
+                            NextRequest = {lists:keystore(
+                                             <<"ExclusiveStartKey">>, 1,
+                                             UserRequest,
+                                             {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
+                            do_query(NextRequest, {NewAcc, NewLen}, Opts);
+                        false ->
+                            {ok, NewAcc}
+                    end
             end;
 
         {error, Reason} ->
