@@ -1,6 +1,8 @@
 -module(current_test).
 -include_lib("eunit/include/eunit.hrl").
 
+-export([request_error/3]).
+
 -define(ENDPOINT, <<"dynamodb.us-east-1.amazonaws.com">>).
 -define(REGION, <<"us-east-1">>).
 
@@ -455,6 +457,7 @@ setup() ->
     AccessKey = proplists:get_value(access_key, Cred),
     SecretAccessKey = proplists:get_value(secret_access_key, Cred),
 
+    application:set_env(current, callback_mod, ?MODULE),
     application:set_env(current, endpoint, ?ENDPOINT),
     application:set_env(current, region, ?REGION),
     application:set_env(current, access_key, AccessKey),
@@ -512,3 +515,6 @@ clear_table(Name) ->
             ok = current:batch_write_item(Request, []),
             clear_table(Name)
     end.
+
+request_error(Operation, _Start, Reason) ->
+    io:format("ERROR in ~p: ~p~n", [Operation, Reason]).
