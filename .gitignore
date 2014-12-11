@@ -4,4 +4,6 @@ priv/aws_credentials.term
 deps
 ebin
 test/aws4_testsuite
-*.beamdynamodb_local
+*.beam
+dynamodb_local
+
