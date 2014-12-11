@@ -73,7 +73,7 @@ batch_get_write_item() ->
                      ]}
                    }]},
 
-    {ok, [{?TABLE, Table1}, {?TABLE_OTHER, Table2}]} =
+    {ok, [{?TABLE_OTHER, Table1}, {?TABLE, Table2}]} =
         current:batch_get_item(GetRequest),
 
     ?assertEqual(lists:sort(Keys), lists:sort(Table1)),
@@ -125,7 +125,7 @@ batch_get_unprocessed_items() ->
                      ]}
                    }]},
 
-    {ok, [{?TABLE, Table1}, {?TABLE_OTHER, Table2}]} =
+    {ok, [{?TABLE_OTHER, Table1}, {?TABLE, Table2}]} =
         current:batch_get_item(GetRequest, []),
 
     ?assertEqual(lists:sort(Keys), lists:sort(Table1)),
