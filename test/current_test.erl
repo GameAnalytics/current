@@ -1,7 +1,13 @@
 -module(current_test).
 -include_lib("eunit/include/eunit.hrl").
 
--define(TABLE, <<"current_test_table">>).
+-export([request_error/3]).
+
+-define(ENDPOINT, <<"localhost:8000">>).
+-define(REGION, <<"us-east-1">>).
+
+-define(TABLE, <<"current_test">>).
+-define(TABLE_OTHER, <<"current_test_other">>).
 -define(i2b(I), list_to_binary(integer_to_list(I))).
 
 -define(NUMBER(I), {[{<<"N">>, ?i2b(I)}]}).
@@ -45,8 +51,8 @@ table_manipulation() ->
 batch_get_write_item() ->
     ok = create_table(?TABLE),
     ok = clear_table(?TABLE),
-    ok = create_table(<<"current_test_other_table">>),
-    ok = clear_table(<<"current_test_other_table">>),
+    ok = create_table(?TABLE_OTHER),
+    ok = clear_table(?TABLE_OTHER),
 
     Keys = [{[{<<"range_key">>, ?NUMBER(random:uniform(1000))},
               {<<"hash_key">>, ?NUMBER(random:uniform(100000))}]}
@@ -56,18 +62,18 @@ batch_get_write_item() ->
                          || Key <- Keys],
     WriteRequest = {[{<<"RequestItems">>,
                       {[{?TABLE, WriteRequestItems},
-                        {<<"current_test_other_table">>, WriteRequestItems}]}
+                        {?TABLE_OTHER, WriteRequestItems}]}
                      }]},
 
     ?assertEqual(ok, current:batch_write_item(WriteRequest, [])),
 
     GetRequest = {[{<<"RequestItems">>,
                     {[{?TABLE, {[{<<"Keys">>, Keys}]}},
-                      {<<"current_test_other_table">>, {[{<<"Keys">>, Keys}]}}
+                      {?TABLE_OTHER, {[{<<"Keys">>, Keys}]}}
                      ]}
                    }]},
 
-    {ok, [{?TABLE, Table1}, {<<"current_test_other_table">>, Table2}]} =
+    {ok, [{?TABLE_OTHER, Table1}, {?TABLE, Table2}]} =
         current:batch_get_item(GetRequest),
 
     ?assertEqual(lists:sort(Keys), lists:sort(Table1)),
@@ -76,7 +82,7 @@ batch_get_write_item() ->
 
 batch_get_unprocessed_items() ->
     ok = create_table(?TABLE),
-    ok = create_table(<<"current_test_other_table">>),
+    ok = create_table(?TABLE_OTHER),
 
     Keys = [{[{<<"range_key">>, ?NUMBER(random:uniform(1000))},
               {<<"hash_key">>, ?NUMBER(random:uniform(100000))}]}
@@ -86,7 +92,7 @@ batch_get_unprocessed_items() ->
                          || Key <- Keys],
     WriteRequest = {[{<<"RequestItems">>,
                       {[{?TABLE, WriteRequestItems},
-                        {<<"current_test_other_table">>, WriteRequestItems}]}
+                        {?TABLE_OTHER, WriteRequestItems}]}
                      }]},
 
     ?assertEqual(ok, current:batch_write_item(WriteRequest, [])),
@@ -94,7 +100,7 @@ batch_get_unprocessed_items() ->
 
     {Keys1, Keys2} = lists:split(110, Keys),
     UnprocessedKeys = {[{?TABLE, {[{<<"Keys">>, Keys2}]}},
-                        {<<"current_test_other_table">>, {[{<<"Keys">>, Keys2}]}}
+                        {?TABLE_OTHER, {[{<<"Keys">>, Keys2}]}}
                        ]},
     meck:new(party, [passthrough]),
     meck:expect(party, post, 4,
@@ -115,11 +121,11 @@ batch_get_unprocessed_items() ->
 
     GetRequest = {[{<<"RequestItems">>,
                     {[{?TABLE, {[{<<"Keys">>, Keys1}]}},
-                      {<<"current_test_other_table">>, {[{<<"Keys">>, Keys1}]}}
+                      {?TABLE_OTHER, {[{<<"Keys">>, Keys1}]}}
                      ]}
                    }]},
 
-    {ok, [{?TABLE, Table1}, {<<"current_test_other_table">>, Table2}]} =
+    {ok, [{?TABLE_OTHER, Table1}, {?TABLE, Table2}]} =
         current:batch_get_item(GetRequest, []),
 
     ?assertEqual(lists:sort(Keys), lists:sort(Table1)),
@@ -268,9 +274,9 @@ get_put_update_delete() ->
     Key = {[{<<"hash_key">>, {[{<<"N">>, <<"1">>}]}},
             {<<"range_key">>, {[{<<"N">>, <<"1">>}]}}]},
 
-    Item = {[{<<"range_key">>, {[{<<"N">>, <<"1">>}]}},
-             {<<"hash_key">>, {[{<<"N">>, <<"1">>}]}},
-             {<<"attribute">>, {[{<<"SS">>, [<<"foo">>]}]}}]},
+    Item = {[{<<"attribute">>, {[{<<"SS">>, [<<"foo">>]}]}},
+             {<<"range_key">>, {[{<<"N">>, <<"1">>}]}},
+             {<<"hash_key">>, {[{<<"N">>, <<"1">>}]}}]},
 
     {ok, {NoItem}} = current:get_item({[{<<"TableName">>, ?TABLE},
                                         {<<"Key">>, Key}]}),
@@ -282,7 +288,8 @@ get_put_update_delete() ->
 
     {ok, {WithItem}} = current:get_item({[{<<"TableName">>, ?TABLE},
                                         {<<"Key">>, Key}]}),
-    ?assertEqual(Item, proplists:get_value(<<"Item">>, WithItem)),
+    {ActualItem} = proplists:get_value(<<"Item">>, WithItem),
+    ?assertEqual(lists:sort(element(1, Item)), lists:sort(ActualItem)),
 
     {ok, _} = current:update_item(
                 {[{<<"TableName">>, ?TABLE},
@@ -295,8 +302,10 @@ get_put_update_delete() ->
     {ok, {WithUpdate}} = current:get_item({[{<<"TableName">>, ?TABLE},
                                              {<<"Key">>, Key}]}),
     {UpdatedItem} = proplists:get_value(<<"Item">>, WithUpdate),
-    ?assertEqual({[{<<"SS">>, [<<"bar">>, <<"foo">>]}]},
-                 proplists:get_value(<<"attribute">>, UpdatedItem)),
+    Attribute = proplists:get_value(<<"attribute">>, UpdatedItem),
+    ?assertMatch({[{<<"SS">>, _Values}]}, Attribute),
+    {[{<<"SS">>, Values}]} = Attribute,
+    ?assertEqual([<<"bar">>, <<"foo">>], lists:sort(Values)),
 
 
     ?assertMatch({ok, _}, current:delete_item({[{<<"TableName">>, ?TABLE},
@@ -451,11 +460,13 @@ setup() ->
     AccessKey = proplists:get_value(access_key, Cred),
     SecretAccessKey = proplists:get_value(secret_access_key, Cred),
 
-    application:set_env(current, region, <<"us-east-1">>),
+    application:set_env(current, callback_mod, ?MODULE),
+    application:set_env(current, endpoint, ?ENDPOINT),
+    application:set_env(current, region, ?REGION),
     application:set_env(current, access_key, AccessKey),
     application:set_env(current, secret_access_key, SecretAccessKey),
 
-    ok = party:connect(<<"http://dynamodb.us-east-1.amazonaws.com">>, 2),
+    ok = party:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2),
 
     application:start(current).
 
@@ -485,7 +496,7 @@ create_table(Name) ->
             ?assertMatch({ok, _},
                          current:create_table(R, [{timeout, 5000}, {retries, 3}])),
             ok = current:wait_for_active(?TABLE, 5000);
-        {error, {Type, Reason}} ->
+        {error, {_Type, Reason}} ->
             error_logger:info_msg("~p~n", [Reason]);
         {ok, _} ->
             ok
@@ -500,10 +511,10 @@ clear_table(Name) ->
         {ok, Items} ->
             RequestItems = [{[{<<"DeleteRequest">>,
                                {[{<<"Key">>, Item}]}}]} || Item <- Items],
-            Request = {[{<<"RequestItems">>,
-                         {[{Name, RequestItems}]}},
-                        {<<"AttributesToGet">>, [<<"hash_key">>, <<"range_key">>]}
-                       ]},
+            Request = {[{<<"RequestItems">>, {[{Name, RequestItems}]}}]},
             ok = current:batch_write_item(Request, []),
             clear_table(Name)
     end.
+
+request_error(Operation, _Start, Reason) ->
+    io:format("ERROR in ~p: ~p~n", [Operation, Reason]).
