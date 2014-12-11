@@ -432,8 +432,13 @@ retry(Op, Request, Retries, Start, Opts) ->
 do(Operation, {UserRequest}, Opts) ->
     Now = edatetime:now2ts(),
 
-    Request = {lists:keystore(<<"ReturnConsumedCapacity">>, 1, UserRequest,
-                              {<<"ReturnConsumedCapacity">>, <<"TOTAL">>})},
+    Request = case Operation of
+        Op when Op == delete_table; Op == describe_table; Op == create_table ->
+            {UserRequest};
+        _Other ->
+            {lists:keystore(<<"ReturnConsumedCapacity">>, 1, UserRequest,
+                              {<<"ReturnConsumedCapacity">>, <<"TOTAL">>})}
+    end,
 
     Body = jiffy:encode(Request),
 

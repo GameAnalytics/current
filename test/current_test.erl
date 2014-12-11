@@ -274,9 +274,9 @@ get_put_update_delete() ->
     Key = {[{<<"hash_key">>, {[{<<"N">>, <<"1">>}]}},
             {<<"range_key">>, {[{<<"N">>, <<"1">>}]}}]},
 
-    Item = {[{<<"range_key">>, {[{<<"N">>, <<"1">>}]}},
-             {<<"hash_key">>, {[{<<"N">>, <<"1">>}]}},
-             {<<"attribute">>, {[{<<"SS">>, [<<"foo">>]}]}}]},
+    Item = {[{<<"attribute">>, {[{<<"SS">>, [<<"foo">>]}]}},
+             {<<"range_key">>, {[{<<"N">>, <<"1">>}]}},
+             {<<"hash_key">>, {[{<<"N">>, <<"1">>}]}}]},
 
     {ok, {NoItem}} = current:get_item({[{<<"TableName">>, ?TABLE},
                                         {<<"Key">>, Key}]}),
@@ -288,7 +288,8 @@ get_put_update_delete() ->
 
     {ok, {WithItem}} = current:get_item({[{<<"TableName">>, ?TABLE},
                                         {<<"Key">>, Key}]}),
-    ?assertEqual(Item, proplists:get_value(<<"Item">>, WithItem)),
+    {ActualItem} = proplists:get_value(<<"Item">>, WithItem),
+    ?assertEqual(lists:sort(element(1, Item)), lists:sort(ActualItem)),
 
     {ok, _} = current:update_item(
                 {[{<<"TableName">>, ?TABLE},
@@ -301,8 +302,10 @@ get_put_update_delete() ->
     {ok, {WithUpdate}} = current:get_item({[{<<"TableName">>, ?TABLE},
                                              {<<"Key">>, Key}]}),
     {UpdatedItem} = proplists:get_value(<<"Item">>, WithUpdate),
-    ?assertEqual({[{<<"SS">>, [<<"bar">>, <<"foo">>]}]},
-                 proplists:get_value(<<"attribute">>, UpdatedItem)),
+    Attribute = proplists:get_value(<<"attribute">>, UpdatedItem),
+    ?assertMatch({[{<<"SS">>, _Values}]}, Attribute),
+    {[{<<"SS">>, Values}]} = Attribute,
+    ?assertEqual([<<"bar">>, <<"foo">>], lists:sort(Values)),
 
 
     ?assertMatch({ok, _}, current:delete_item({[{<<"TableName">>, ?TABLE},
@@ -509,8 +512,8 @@ clear_table(Name) ->
             RequestItems = [{[{<<"DeleteRequest">>,
                                {[{<<"Key">>, Item}]}}]} || Item <- Items],
             Request = {[{<<"RequestItems">>,
-                         {[{Name, RequestItems}]}},
-                        {<<"AttributesToGet">>, [<<"hash_key">>, <<"range_key">>]}
+                         {[{Name, RequestItems}]}}
+                        % {<<"AttributesToGet">>, [<<"hash_key">>, <<"range_key">>]}
                        ]},
             ok = current:batch_write_item(Request, []),
             clear_table(Name)
