@@ -3,7 +3,7 @@
 
 -export([request_error/3]).
 
--define(ENDPOINT, <<"dynamodb.us-east-1.amazonaws.com">>).
+-define(ENDPOINT, <<"localhost:8000">>).
 -define(REGION, <<"us-east-1">>).
 
 -define(TABLE, <<"current_test">>).
@@ -511,10 +511,7 @@ clear_table(Name) ->
         {ok, Items} ->
             RequestItems = [{[{<<"DeleteRequest">>,
                                {[{<<"Key">>, Item}]}}]} || Item <- Items],
-            Request = {[{<<"RequestItems">>,
-                         {[{Name, RequestItems}]}}
-                        % {<<"AttributesToGet">>, [<<"hash_key">>, <<"range_key">>]}
-                       ]},
+            Request = {[{<<"RequestItems">>, {[{Name, RequestItems}]}}]},
             ok = current:batch_write_item(Request, []),
             clear_table(Name)
     end.
