@@ -12,10 +12,22 @@ which tries to do away with the single process bottleneck found in
 [lhttpc][]. Although it's used in production at Game Analytics without
 any problems found, it might not be ready for prime time just yet.
 
+## Dependencies
+* Erlang (>= R15)
+* [rebar][]
+* [Java JRE][] (for testing only)
+* [screen][] (for testing only)
+
+
 ## Usage
 
-```erlang
+Fetch and compile all application dependencies:
+```bash
+$ rebar get compile
+```
 
+Example usage:
+```erlang
 1> application:ensure_all_started(current).
 {ok,[party,current]}
 2> party:connect(<<"http://dynamodb.us-east-1.amazonaws.com">>, 2).
@@ -70,8 +82,13 @@ If you provide AWS credentials in `priv/aws_credentials.term` (see
 `priv/aws_credentials_term.template`), you can run the test
 suite. Tables will be created under your account.
 
+To run all tests use `rebar eunit`
+
 
 [jiffy]: https://github.com/davisp/jiffy
 [party]: https://github.com/knutin/party
 [lhttpc]: https://github.com/ferd/lhttpc
 [DynamoDB documentation]: http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/Welcome.html
+[rebar]: https://github.com/rebar/rebar
+[Java JRE]: http://java.com/en/
+[screen]: https://www.gnu.org/software/screen/
