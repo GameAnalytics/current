@@ -455,7 +455,13 @@ setup() ->
     application:start(carpool),
     application:start(party),
 
-    File = filename:join([code:priv_dir(current), "aws_credentials.term"]),
+    %% Make travis-ci use different env/config
+    Environment = case os:getenv("TRAVIS") of
+                      "true" -> "ci_credentials.term";
+                      false  -> "aws_credentials.term"
+                  end,
+
+    File = filename:join([code:priv_dir(current), Environment]),
     {ok, Cred} = file:consult(File),
     AccessKey = proplists:get_value(access_key, Cred),
     SecretAccessKey = proplists:get_value(secret_access_key, Cred),
