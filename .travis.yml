@@ -1,6 +1,6 @@
 language: erlang
 otp_release:
-    - R16B03
+    - R16B02
 before_install:
  - sudo apt-get install -qq screen default-jre
 script: "./rebar compile && ./rebar xref skip_deps=true && ./rebar eunit skip_deps=true"
