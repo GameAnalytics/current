@@ -15,16 +15,16 @@
 current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
-      {timeout, 120, ?_test(table_manipulation())},
-      {timeout, 30, ?_test(batch_get_write_item())},
-      {timeout, 30, ?_test(batch_get_unprocessed_items())},
-      {timeout, 30, ?_test(scan())},
-      {timeout, 30, ?_test(q())},
-      {timeout, 30, ?_test(get_put_update_delete())},
-      {timeout, 30, ?_test(retry_with_timeout())},
-      {timeout, 30, ?_test(timeout())},
-      {timeout, 30, ?_test(throttled())},
-      {timeout, 30, ?_test(non_json_error())}
+      %% {timeout, 120, ?_test(table_manipulation())},
+      %% {timeout, 30, ?_test(batch_get_write_item())},
+      %% {timeout, 30, ?_test(batch_get_unprocessed_items())},
+      %% {timeout, 30, ?_test(scan())},
+      {timeout, 30, ?_test(q())}
+      %% {timeout, 30, ?_test(get_put_update_delete())},
+      %% {timeout, 30, ?_test(retry_with_timeout())},
+      %% {timeout, 30, ?_test(timeout())},
+      %% {timeout, 30, ?_test(throttled())},
+      %% {timeout, 30, ?_test(non_json_error())}
      ]}.
 
 
@@ -238,6 +238,7 @@ q() ->
           {<<"Limit">>, 10}]},
 
     {ok, ResultItems} = current:q(Q, []),
+
     ?assertEqual(lists:sort(Items), lists:sort(ResultItems)),
 
     %% Count
@@ -262,9 +263,25 @@ q() ->
                  current:q(ErrorQ, [])),
 
     %% Limit
-    {ok, LimitedItems} = current:q(Q, [{max_items, 10}]),
-    ?assertEqual(10, length(LimitedItems)).
+    {ok, LimitedItems1, LastEvaluatedKey1} = current:q(Q, [{max_items, 80}]),
+    ?assertEqual(80, length(LimitedItems1)),
 
+    %% Pagging
+    Q1 = {[{<<"TableName">>, ?TABLE},
+          {<<"KeyConditions">>,
+           {[{<<"hash_key">>,
+              {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
+                {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
+           {<<"ExclusiveStartKey">>, LastEvaluatedKey1},
+           {<<"Limit">>, 30}]},
+    R = current:q(Q1, [{max_items, 30}]),
+    ?debugFmt("result=~p", [R]),
+    %{ok, LimitedItems2, LastEvaluatedKey2} = R,
+    {ok, LimitedItems2} = R,
+    ?debugFmt("LimitedItems=~p", [length(LimitedItems2)]),
+    %?debugFmt("LastEvaluatedKey=~p", [LastEvaluatedKey2]),
+
+    ok.
 
 
 get_put_update_delete() ->
@@ -455,9 +472,10 @@ setup() ->
     application:start(carpool),
     application:start(party),
 
-    %% Make travis-ci use different env/config
+    %% Make travis-ci use different env/config we do not need valid
+    %% credentials for CI since we are using local DynamDB
     Environment = case os:getenv("TRAVIS") of
-                      "true" -> "ci_credentials.term";
+                      "true" -> "aws_credentials.term.template";
                       false  -> "aws_credentials.term"
                   end,
 

@@ -1,6 +1,9 @@
 %% @doc: DynamoDB client
 -module(current).
 
+%%FIXME: this is only for debugging!!!
+-include_lib("eunit/include/eunit.hrl").
+
 %% DynamoDB API
 -export([
          batch_get_item/1,
@@ -326,7 +329,7 @@ do_query({UserRequest}, {Acc, AccLen}, Opts) ->
                                              {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
                             do_query(NextRequest, {NewAcc, NewLen}, Opts);
                         false ->
-                            {ok, NewAcc}
+                            {ok, NewAcc, LastEvaluatedKey}
                     end
             end;
 
@@ -640,4 +643,3 @@ ymd(Now) ->
 
 callback_mod() ->
     application:get_env(current, callback_mod, current_callback).
-
