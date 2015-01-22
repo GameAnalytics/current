@@ -173,7 +173,13 @@ scan() ->
     {ok, LimitedItems2, LastEvaluatedKey2} = current:scan(Q1, [{max_items, 30}]),
     ?debugFmt("scan.resutls(30)=~p", [length(LimitedItems2)]),
     ?assertEqual(20, length(LimitedItems2)),
-    ?assertEqual(undefined, LastEvaluatedKey2).
+    ?assertEqual(undefined, LastEvaluatedKey2),
+
+    %%TODO: check for overlaps!
+    ?debugFmt("scan.part1=~p", [LimitedItems1]),
+    ?debugFmt("scan.part2=~p", [LimitedItems2]),
+
+    ok.
 
 
 take_write_batch_test() ->
@@ -289,7 +295,13 @@ q() ->
            {<<"Limit">>, 10}]},
     {ok, LimitedItems2, LastEvaluatedKey2} = current:q(Q1, [{max_items, 30}]),
     ?assertEqual(20, length(LimitedItems2)),
-    ?assertEqual(undefined, LastEvaluatedKey2).
+    ?assertEqual(undefined, LastEvaluatedKey2),
+
+    %%TODO: check for overlaps!
+    ?debugFmt("q.part1=~p", [LimitedItems1]),
+    ?debugFmt("q.part2=~p", [LimitedItems2]),
+
+    ok.
 
 
 get_put_update_delete() ->
