@@ -137,6 +137,8 @@ batch_get_unprocessed_items() ->
 
 scan() ->
     ok = create_table(?TABLE),
+    ok = clear_table(?TABLE),
+
     RequestItems = [begin
                         {[{<<"PutRequest">>,
                            {[{<<"Item">>,
@@ -172,17 +174,16 @@ scan() ->
            {<<"Limit">>, 10}]},
     {ok, LimitedItems2, LastEvaluatedKey2} = current:scan(Q1, [{max_items, 30}]),
 
-    ?debugFmt("scan.part1=~p", [LimitedItems1]),
-    ?debugFmt("scan.part2=~p", [LimitedItems2]),
-
-    ?debugFmt("scan.resutls(30)=~p", [length(LimitedItems2)]),
-    ?assertEqual(20, length(LimitedItems2)),
-    ?assertEqual(undefined, LastEvaluatedKey2),
+    ?debugFmt("items1=~p, items2=~p", [length(LimitedItems1), length(LimitedItems2)]),
+    ?debugFmt("items1=~p", [lists:sort(LimitedItems1)]),
+    ?debugFmt("items2=~p", [lists:sort(LimitedItems2)]),
 
     %% check for overlaps
-    ?assertEqual(0, sets:size(
-                      sets:intersection(sets:from_list(LimitedItems1),
-                                        sets:from_list(LimitedItems2)))).
+    ?assertEqual(0, sets:size(sets:intersection(sets:from_list(LimitedItems1),
+                                                sets:from_list(LimitedItems2)))),
+
+    ?assertEqual(20, length(LimitedItems2)),
+    ?assertEqual(undefined, LastEvaluatedKey2).
 
 
 take_write_batch_test() ->
@@ -297,13 +298,14 @@ q() ->
            {<<"ExclusiveStartKey">>, LastEvaluatedKey1},
            {<<"Limit">>, 10}]},
     {ok, LimitedItems2, LastEvaluatedKey2} = current:q(Q1, [{max_items, 30}]),
-    ?assertEqual(20, length(LimitedItems2)),
-    ?assertEqual(undefined, LastEvaluatedKey2),
 
     %% check for overlaps
     ?assertEqual(0, sets:size(
                       sets:intersection(sets:from_list(LimitedItems1),
-                                        sets:from_list(LimitedItems2)))).
+                                        sets:from_list(LimitedItems2)))),
+
+    ?assertEqual(20, length(LimitedItems2)),
+    ?assertEqual(undefined, LastEvaluatedKey2).
 
 
 get_put_update_delete() ->
