@@ -171,15 +171,18 @@ scan() ->
            {<<"ExclusiveStartKey">>, LastEvaluatedKey1},
            {<<"Limit">>, 10}]},
     {ok, LimitedItems2, LastEvaluatedKey2} = current:scan(Q1, [{max_items, 30}]),
+
+    ?debugFmt("scan.part1=~p", [LimitedItems1]),
+    ?debugFmt("scan.part2=~p", [LimitedItems2]),
+
     ?debugFmt("scan.resutls(30)=~p", [length(LimitedItems2)]),
     ?assertEqual(20, length(LimitedItems2)),
     ?assertEqual(undefined, LastEvaluatedKey2),
 
-    %%TODO: check for overlaps!
-    ?debugFmt("scan.part1=~p", [LimitedItems1]),
-    ?debugFmt("scan.part2=~p", [LimitedItems2]),
-
-    ok.
+    %% check for overlaps
+    ?assertEqual(0, sets:size(
+                      sets:intersection(sets:from_list(LimitedItems1),
+                                        sets:from_list(LimitedItems2)))).
 
 
 take_write_batch_test() ->
@@ -297,11 +300,10 @@ q() ->
     ?assertEqual(20, length(LimitedItems2)),
     ?assertEqual(undefined, LastEvaluatedKey2),
 
-    %%TODO: check for overlaps!
-    ?debugFmt("q.part1=~p", [LimitedItems1]),
-    ?debugFmt("q.part2=~p", [LimitedItems2]),
-
-    ok.
+    %% check for overlaps
+    ?assertEqual(0, sets:size(
+                      sets:intersection(sets:from_list(LimitedItems1),
+                                        sets:from_list(LimitedItems2)))).
 
 
 get_put_update_delete() ->
