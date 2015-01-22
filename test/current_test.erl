@@ -15,16 +15,16 @@
 current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
-      %% {timeout, 120, ?_test(table_manipulation())},
-      %% {timeout, 30, ?_test(batch_get_write_item())},
-      %% {timeout, 30, ?_test(batch_get_unprocessed_items())},
-      %% {timeout, 30, ?_test(scan())},
-      {timeout, 30, ?_test(q())}
-      %% {timeout, 30, ?_test(get_put_update_delete())},
-      %% {timeout, 30, ?_test(retry_with_timeout())},
-      %% {timeout, 30, ?_test(timeout())},
-      %% {timeout, 30, ?_test(throttled())},
-      %% {timeout, 30, ?_test(non_json_error())}
+      {timeout, 120, ?_test(table_manipulation())},
+      {timeout, 30, ?_test(batch_get_write_item())},
+      {timeout, 30, ?_test(batch_get_unprocessed_items())},
+      {timeout, 30, ?_test(scan())},
+      {timeout, 30, ?_test(q())},
+      {timeout, 30, ?_test(get_put_update_delete())},
+      {timeout, 30, ?_test(retry_with_timeout())},
+      {timeout, 30, ?_test(timeout())},
+      {timeout, 30, ?_test(throttled())},
+      {timeout, 30, ?_test(non_json_error())}
      ]}.
 
 
@@ -152,15 +152,28 @@ scan() ->
 
     ok = current:batch_write_item(Request, []),
 
-    Q = {[{<<"TableName">>, ?TABLE}]},
+    Q = {[{<<"TableName">>, ?TABLE},
+          {<<"Limit">>, 10}]},
 
     ?assertMatch({ok, L} when is_list(L), current:scan(Q, [])),
 
     %% Errors
     ErrorQ = {[{<<"TableName">>, <<"non-existing-table">>}]},
     ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
-                 current:scan(ErrorQ, [])).
+                 current:scan(ErrorQ, [])),
 
+    %% Limit and pagging
+    {ok, LimitedItems1, LastEvaluatedKey1} = current:scan(Q, [{max_items, 80}]),
+    ?assertEqual(80, length(LimitedItems1)),
+
+    %% Pagging last page
+    Q1 = {[{<<"TableName">>, ?TABLE},
+           {<<"ExclusiveStartKey">>, LastEvaluatedKey1},
+           {<<"Limit">>, 10}]},
+    {ok, LimitedItems2, LastEvaluatedKey2} = current:scan(Q1, [{max_items, 30}]),
+    ?debugFmt("scan.resutls(30)=~p", [length(LimitedItems2)]),
+    ?assertEqual(20, length(LimitedItems2)),
+    ?assertEqual(undefined, LastEvaluatedKey2).
 
 
 take_write_batch_test() ->
@@ -262,26 +275,21 @@ q() ->
     ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
                  current:q(ErrorQ, [])),
 
-    %% Limit
+    %% Limit and pagging
     {ok, LimitedItems1, LastEvaluatedKey1} = current:q(Q, [{max_items, 80}]),
     ?assertEqual(80, length(LimitedItems1)),
 
-    %% Pagging
+    %% Pagging last page
     Q1 = {[{<<"TableName">>, ?TABLE},
           {<<"KeyConditions">>,
            {[{<<"hash_key">>,
               {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
                 {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
            {<<"ExclusiveStartKey">>, LastEvaluatedKey1},
-           {<<"Limit">>, 30}]},
-    R = current:q(Q1, [{max_items, 30}]),
-    ?debugFmt("result=~p", [R]),
-    %{ok, LimitedItems2, LastEvaluatedKey2} = R,
-    {ok, LimitedItems2} = R,
-    ?debugFmt("LimitedItems=~p", [length(LimitedItems2)]),
-    %?debugFmt("LastEvaluatedKey=~p", [LastEvaluatedKey2]),
-
-    ok.
+           {<<"Limit">>, 10}]},
+    {ok, LimitedItems2, LastEvaluatedKey2} = current:q(Q1, [{max_items, 30}]),
+    ?assertEqual(20, length(LimitedItems2)),
+    ?assertEqual(undefined, LastEvaluatedKey2).
 
 
 get_put_update_delete() ->

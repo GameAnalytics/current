@@ -287,6 +287,7 @@ split_batch(N, [H | T], Acc) -> split_batch(N-1, T, [H | Acc]).
 do_query(Request, Opts) ->
     do_query(Request, {undefined, 0}, Opts).
 
+%%TODO: there is a lot of similarities with do_scan/3
 do_query({UserRequest}, {Acc, AccLen}, Opts) ->
     ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
                             undefined ->
@@ -318,7 +319,13 @@ do_query({UserRequest}, {Acc, AccLen}, Opts) ->
             case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
                 undefined ->
                     {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
-                    {ok, ResultAcc};
+                    case proplists:is_defined(max_items, Opts) of
+                        true ->
+                            %% we hit last page of results
+                            {ok, ResultAcc, undefined};
+                        false ->
+                            {ok, ResultAcc}
+                    end;
                 LastEvaluatedKey ->
                     {NewAcc, NewLen} = Accumulate(Result, {Acc, AccLen}),
                     case proplists:get_value(max_items, Opts, infinity) > NewLen of
@@ -349,9 +356,10 @@ do_query({UserRequest}, {Acc, AccLen}, Opts) ->
 
 
 do_scan(Request, Opts) ->
-    do_scan(Request, [], Opts).
+    do_scan(Request, {undefined, 0}, Opts).
 
-do_scan({UserRequest}, Acc, Opts) ->
+%%TODO: there is a lot of similarities with do_query/3
+do_scan({UserRequest}, {Acc, AccLen}, Opts) ->
     ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
                             undefined ->
                                 [];
@@ -361,23 +369,53 @@ do_scan({UserRequest}, Acc, Opts) ->
 
     Request = {ExclusiveStartKey ++ UserRequest},
 
+    IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
+    Accumulate = case IsCount of
+                     true ->
+                         fun (Count, {undefined, _}) -> {Count, Count};
+                             (Count, {A, _}) -> {Count + A, Count + A}
+                         end;
+                     false ->
+                         fun (Items, {undefined, _}) -> {Items, length(Items)};
+                             (Items, {A, Len}) -> {Items ++ A, Len + length(Items)}
+                         end
+                 end,
+
     case retry(scan, Request, Opts) of
         {ok, {Response}} ->
-            Items = proplists:get_value(<<"Items">>, Response, []),
+            Result = case IsCount of
+                         true -> proplists:get_value(<<"Count">>, Response);
+                         false -> proplists:get_value(<<"Items">>, Response)
+                     end,
             case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
                 undefined ->
-                    {ok, Items ++ Acc};
+                    {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
+                    case proplists:is_defined(max_items, Opts) of
+                        true ->
+                            %% we hit last page of results
+                            {ok, ResultAcc, undefined};
+                        false ->
+                            {ok, ResultAcc}
+                    end;
                 LastEvaluatedKey ->
-                    NextRequest = {lists:keystore(
-                                     <<"ExclusiveStartKey">>, 1,
-                                     UserRequest,
-                                     {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
-                    do_scan(NextRequest, Items ++ Acc, Opts)
+                    {NewAcc, NewLen} = Accumulate(Result, {Acc, AccLen}),
+                    case proplists:get_value(max_items, Opts, infinity) > NewLen of
+                        true ->
+                            NextRequest = {lists:keystore(
+                                             <<"ExclusiveStartKey">>, 1,
+                                             UserRequest,
+                                             {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
+                            do_scan(NextRequest, {NewAcc, NewLen}, Opts);
+                        false ->
+                            {ok, NewAcc, LastEvaluatedKey}
+                    end
+
             end;
 
         {error, Reason} ->
             {error, Reason}
     end.
+
 
 
 
