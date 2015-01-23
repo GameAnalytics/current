@@ -154,8 +154,7 @@ scan() ->
 
     ok = current:batch_write_item(Request, []),
 
-    Q = {[{<<"TableName">>, ?TABLE},
-          {<<"Limit">>, 10}]},
+    Q = {[{<<"TableName">>, ?TABLE}]},
 
     ?assertMatch({ok, L} when is_list(L), current:scan(Q, [])),
 
@@ -170,8 +169,7 @@ scan() ->
 
     %% Pagging last page
     Q1 = {[{<<"TableName">>, ?TABLE},
-           {<<"ExclusiveStartKey">>, LastEvaluatedKey1},
-           {<<"Limit">>, 10}]},
+           {<<"ExclusiveStartKey">>, LastEvaluatedKey1}]},
     {ok, LimitedItems2, LastEvaluatedKey2} = current:scan(Q1, [{max_items, 30}]),
 
     %% check for overlaps
@@ -253,8 +251,7 @@ q() ->
           {<<"KeyConditions">>,
            {[{<<"hash_key">>,
               {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
-                {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
-          {<<"Limit">>, 10}]},
+                {<<"ComparisonOperator">>, <<"EQ">>}]}}]}}]},
 
     {ok, ResultItems} = current:q(Q, []),
 
@@ -291,8 +288,7 @@ q() ->
            {[{<<"hash_key">>,
               {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
                 {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
-           {<<"ExclusiveStartKey">>, LastEvaluatedKey1},
-           {<<"Limit">>, 10}]},
+           {<<"ExclusiveStartKey">>, LastEvaluatedKey1}]},
     {ok, LimitedItems2, LastEvaluatedKey2} = current:q(Q1, [{max_items, 30}]),
 
     %% check for overlaps
