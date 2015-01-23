@@ -1,6 +1,6 @@
 # DynamoDB client for Erlang
 
-[![Build Status](https://travis-ci.org/GameAnalytics/current?branch=master)](https://travis-ci.org/GameAnalytics/current)
+[![Build Status](https://travis-ci.org/GameAnalytics/current.svg?branch=master)](https://travis-ci.org/GameAnalytics/current)
 
 Current is an Erlang client for Amazons DynamoDB service. It exposes
 the raw JSON API described in the [DynamoDB documentation], taking
