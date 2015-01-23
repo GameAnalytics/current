@@ -174,10 +174,6 @@ scan() ->
            {<<"Limit">>, 10}]},
     {ok, LimitedItems2, LastEvaluatedKey2} = current:scan(Q1, [{max_items, 30}]),
 
-    ?debugFmt("items1=~p, items2=~p", [length(LimitedItems1), length(LimitedItems2)]),
-    ?debugFmt("items1=~p", [lists:sort(LimitedItems1)]),
-    ?debugFmt("items2=~p", [lists:sort(LimitedItems2)]),
-
     %% check for overlaps
     ?assertEqual(0, sets:size(sets:intersection(sets:from_list(LimitedItems1),
                                                 sets:from_list(LimitedItems2)))),
