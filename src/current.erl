@@ -289,15 +289,7 @@ do_query(Request, Opts) ->
 
 %%TODO: there is a lot of similarities with do_scan/3
 do_query({UserRequest}, {Acc, AccLen}, Opts) ->
-    ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
-                            undefined ->
-                                [];
-                            StartKey ->
-                                [{<<"ExclusiveStartKey">>, StartKey}]
-                        end,
-
-    Request = {ExclusiveStartKey ++ UserRequest},
-
+    Request = prepare_query(UserRequest, Opts),
     IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
     Accumulate = case IsCount of
                      true ->
@@ -316,27 +308,37 @@ do_query({UserRequest}, {Acc, AccLen}, Opts) ->
                          true -> proplists:get_value(<<"Count">>, Response);
                          false -> proplists:get_value(<<"Items">>, Response)
                      end,
-            case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
-                undefined ->
+            case proplists:get_value(max_items, Opts, infinity) of
+                infinity ->
                     {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
-                    case proplists:is_defined(max_items, Opts) of
-                        true ->
+                    {ok, ResultAcc};
+                MaxItems ->
+                    %% pagination
+                    case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
+                        undefined ->
                             %% we hit last page of results
+                            {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
                             {ok, ResultAcc, undefined};
-                        false ->
-                            {ok, ResultAcc}
-                    end;
-                LastEvaluatedKey ->
-                    {NewAcc, NewLen} = Accumulate(Result, {Acc, AccLen}),
-                    case proplists:get_value(max_items, Opts, infinity) > NewLen of
-                        true ->
-                            NextRequest = {lists:keystore(
-                                             <<"ExclusiveStartKey">>, 1,
-                                             UserRequest,
-                                             {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
-                            do_query(NextRequest, {NewAcc, NewLen}, Opts);
-                        false ->
-                            {ok, NewAcc, LastEvaluatedKey}
+                        LastEvaluatedKey ->
+                            %% handle pages
+                            {NewAcc, NewLen} = Accumulate(Result, {Acc, AccLen}),
+                            case MaxItems > NewLen of
+                                true ->
+                                    NextRequest = update_query(UserRequest,
+                                                               <<"ExclusiveStartKey">>,
+                                                               LastEvaluatedKey),
+                                    case proplists:is_defined(<<"Limit">>, NextRequest) of
+                                        true ->
+                                            do_query({NextRequest}, {NewAcc, NewLen}, Opts);
+                                        false ->
+                                            NextRequest1 = update_query(NextRequest,
+                                                                        <<"Limit">>,
+                                                                        MaxItems),
+                                            do_scan({NextRequest1}, {NewAcc, NewLen}, Opts)
+                                    end;
+                                false ->
+                                    {ok, NewAcc, LastEvaluatedKey}
+                            end
                     end
             end;
 
@@ -360,15 +362,7 @@ do_scan(Request, Opts) ->
 
 %%TODO: there is a lot of similarities with do_query/3
 do_scan({UserRequest}, {Acc, AccLen}, Opts) ->
-    ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
-                            undefined ->
-                                [];
-                            StartKey ->
-                                [{<<"ExclusiveStartKey">>, StartKey}]
-                        end,
-
-    Request = {ExclusiveStartKey ++ UserRequest},
-
+    Request = prepare_query(UserRequest, Opts),
     IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
     Accumulate = case IsCount of
                      true ->
@@ -387,45 +381,67 @@ do_scan({UserRequest}, {Acc, AccLen}, Opts) ->
                          true -> proplists:get_value(<<"Count">>, Response);
                          false -> proplists:get_value(<<"Items">>, Response)
                      end,
-            case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
-                undefined ->
+            case proplists:get_value(max_items, Opts, infinity) of
+                infinity ->
                     {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
-                    case proplists:is_defined(max_items, Opts) of
-                        true ->
+                    {ok, ResultAcc};
+                MaxItems ->
+                    %% pagination
+                    case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
+                        undefined ->
                             %% we hit last page of results
+                            {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
                             {ok, ResultAcc, undefined};
-                        false ->
-                            {ok, ResultAcc}
-                    end;
-                LastEvaluatedKey ->
-                    {NewAcc, NewLen} = Accumulate(Result, {Acc, AccLen}),
-                    case proplists:get_value(max_items, Opts, infinity) > NewLen of
-                        true ->
-                            NextRequest = {lists:keystore(
-                                             <<"ExclusiveStartKey">>, 1,
-                                             UserRequest,
-                                             {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
-                            do_scan(NextRequest, {NewAcc, NewLen}, Opts);
-                        false ->
-                            {ok, NewAcc, LastEvaluatedKey}
+                        LastEvaluatedKey ->
+                            %% handle pages
+                            {NewAcc, NewLen} = Accumulate(Result, {Acc, AccLen}),
+                            case MaxItems > NewLen of
+                                true ->
+                                    NextRequest = update_query(UserRequest,
+                                                               <<"ExclusiveStartKey">>,
+                                                               LastEvaluatedKey),
+                                    case proplists:is_defined(<<"Limit">>, NextRequest) of
+                                        true ->
+                                            do_scan({NextRequest}, {NewAcc, NewLen}, Opts);
+                                        false ->
+                                            NextRequest1 = update_query(NextRequest,
+                                                                        <<"Limit">>,
+                                                                        MaxItems),
+                                            do_scan({NextRequest1}, {NewAcc, NewLen}, Opts)
+                                    end;
+                                false ->
+                                    {ok, NewAcc, LastEvaluatedKey}
+                            end
                     end
-
             end;
-
         {error, Reason} ->
             {error, Reason}
     end.
 
 
 
-
-
-
-
-
 %%
 %% INTERNALS
 %%
+
+update_query(Request, Key, Value) ->
+    lists:keystore(Key, 1, Request, {Key, Value}).
+
+prepare_query(UserRequest, Opts) ->
+    StartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
+                   undefined ->
+                       [];
+                   ExclusiveStartKey ->
+                       [{<<"ExclusiveStartKey">>, ExclusiveStartKey}]
+               end,
+    MaxItemsLimit = case proplists:get_value(max_items, Opts) of
+                        undefined ->
+                            [];
+                        Limit ->
+                            [{<<"Limit">>, Limit}]
+                    end,
+
+    {StartKey ++ MaxItemsLimit ++ UserRequest}.
 
 -spec retry(target(), request(), [any()]) -> {ok, _} | {error, _}.
 retry(Op, Request, Opts) ->
