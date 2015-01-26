@@ -263,7 +263,6 @@ q() ->
                 {[{<<"hash_key">>,
                    {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
                      {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
-               {<<"Limit">>, 10},
                {<<"Select">>, <<"COUNT">>}]},
     {ok, ResultCount} = current:q(CountQ, []),
     ?assertEqual(100, ResultCount),
@@ -273,8 +272,7 @@ q() ->
                {<<"KeyConditions">>,
                 {[{<<"hash_key">>,
                    {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
-                     {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
-               {<<"Limit">>, 10}]},
+                     {<<"ComparisonOperator">>, <<"EQ">>}]}}]}}]},
     ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
                  current:q(ErrorQ, [])),
 
