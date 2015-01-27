@@ -164,20 +164,22 @@ scan() ->
                  current:scan(ErrorQ, [])),
 
     %% Limit and pagging
-    {ok, LimitedItems1, LastEvaluatedKey1} = current:scan(Q, [{max_items, 80}]),
+    Q1 = {[{<<"TableName">>, ?TABLE},
+          {<<"Limit">>, 80}]},
+    {ok, LimitedItems1, LastEvaluatedKey1} = current:scan(Q1),
     ?assertEqual(80, length(LimitedItems1)),
 
     %% Pagging last page
-    Q1 = {[{<<"TableName">>, ?TABLE},
-           {<<"ExclusiveStartKey">>, LastEvaluatedKey1}]},
-    {ok, LimitedItems2, LastEvaluatedKey2} = current:scan(Q1, [{max_items, 30}]),
+    Q2 = {[{<<"TableName">>, ?TABLE},
+           {<<"ExclusiveStartKey">>, LastEvaluatedKey1},
+           {<<"Limit">>, 30}]},
+    {ok, LimitedItems2} = current:scan(Q2),
 
     %% check for overlaps
     ?assertEqual(0, sets:size(sets:intersection(sets:from_list(LimitedItems1),
                                                 sets:from_list(LimitedItems2)))),
 
-    ?assertEqual(20, length(LimitedItems2)),
-    ?assertEqual(undefined, LastEvaluatedKey2).
+    ?assertEqual(20, length(LimitedItems2)).
 
 
 take_write_batch_test() ->
@@ -277,25 +279,31 @@ q() ->
                  current:q(ErrorQ, [])),
 
     %% Limit and pagging
-    {ok, LimitedItems1, LastEvaluatedKey1} = current:q(Q, [{max_items, 80}]),
+    Q1 = {[{<<"TableName">>, ?TABLE},
+           {<<"KeyConditions">>,
+            {[{<<"hash_key">>,
+               {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
+                 {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
+          {<<"Limit">>, 80}]},
+    {ok, LimitedItems1, LastEvaluatedKey1} = current:q(Q1),
     ?assertEqual(80, length(LimitedItems1)),
 
     %% Pagging last page
-    Q1 = {[{<<"TableName">>, ?TABLE},
+    Q2 = {[{<<"TableName">>, ?TABLE},
           {<<"KeyConditions">>,
            {[{<<"hash_key">>,
               {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
                 {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
-           {<<"ExclusiveStartKey">>, LastEvaluatedKey1}]},
-    {ok, LimitedItems2, LastEvaluatedKey2} = current:q(Q1, [{max_items, 30}]),
+           {<<"ExclusiveStartKey">>, LastEvaluatedKey1},
+           {<<"Limit">>, 30}]},
+    {ok, LimitedItems2} = current:q(Q2),
 
     %% check for overlaps
     ?assertEqual(0, sets:size(
                       sets:intersection(sets:from_list(LimitedItems1),
                                         sets:from_list(LimitedItems2)))),
 
-    ?assertEqual(20, length(LimitedItems2)),
-    ?assertEqual(undefined, LastEvaluatedKey2).
+    ?assertEqual(20, length(LimitedItems2)).
 
 
 get_put_update_delete() ->

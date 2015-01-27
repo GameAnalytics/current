@@ -308,40 +308,13 @@ do_query({UserRequest}, {Acc, AccLen}, Opts) ->
                          true -> proplists:get_value(<<"Count">>, Response);
                          false -> proplists:get_value(<<"Items">>, Response)
                      end,
-            case proplists:get_value(max_items, Opts, infinity) of
-                infinity ->
-                    {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
+            {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
+            case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
+                undefined ->
                     {ok, ResultAcc};
-                MaxItems ->
-                    %% pagination
-                    case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
-                        undefined ->
-                            %% we hit last page of results
-                            {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
-                            {ok, ResultAcc, undefined};
-                        LastEvaluatedKey ->
-                            %% handle pages
-                            {NewAcc, NewLen} = Accumulate(Result, {Acc, AccLen}),
-                            case MaxItems > NewLen of
-                                true ->
-                                    NextRequest = update_query(UserRequest,
-                                                               <<"ExclusiveStartKey">>,
-                                                               LastEvaluatedKey),
-                                    case proplists:is_defined(<<"Limit">>, NextRequest) of
-                                        true ->
-                                            do_query({NextRequest}, {NewAcc, NewLen}, Opts);
-                                        false ->
-                                            NextRequest1 = update_query(NextRequest,
-                                                                        <<"Limit">>,
-                                                                        MaxItems),
-                                            do_scan({NextRequest1}, {NewAcc, NewLen}, Opts)
-                                    end;
-                                false ->
-                                    {ok, NewAcc, LastEvaluatedKey}
-                            end
-                    end
+                LastEvaluatedKey ->
+                    {ok, ResultAcc, LastEvaluatedKey}
             end;
-
         {error, Reason} ->
             {error, Reason}
     end.
@@ -381,38 +354,12 @@ do_scan({UserRequest}, {Acc, AccLen}, Opts) ->
                          true -> proplists:get_value(<<"Count">>, Response);
                          false -> proplists:get_value(<<"Items">>, Response)
                      end,
-            case proplists:get_value(max_items, Opts, infinity) of
-                infinity ->
-                    {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
+            {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
+            case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
+                undefined ->
                     {ok, ResultAcc};
-                MaxItems ->
-                    %% pagination
-                    case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
-                        undefined ->
-                            %% we hit last page of results
-                            {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
-                            {ok, ResultAcc, undefined};
-                        LastEvaluatedKey ->
-                            %% handle pages
-                            {NewAcc, NewLen} = Accumulate(Result, {Acc, AccLen}),
-                            case MaxItems > NewLen of
-                                true ->
-                                    NextRequest = update_query(UserRequest,
-                                                               <<"ExclusiveStartKey">>,
-                                                               LastEvaluatedKey),
-                                    case proplists:is_defined(<<"Limit">>, NextRequest) of
-                                        true ->
-                                            do_scan({NextRequest}, {NewAcc, NewLen}, Opts);
-                                        false ->
-                                            NextRequest1 = update_query(NextRequest,
-                                                                        <<"Limit">>,
-                                                                        MaxItems),
-                                            do_scan({NextRequest1}, {NewAcc, NewLen}, Opts)
-                                    end;
-                                false ->
-                                    {ok, NewAcc, LastEvaluatedKey}
-                            end
-                    end
+                LastEvaluatedKey ->
+                    {ok, ResultAcc, LastEvaluatedKey}
             end;
         {error, Reason} ->
             {error, Reason}
@@ -428,20 +375,12 @@ update_query(Request, Key, Value) ->
     lists:keystore(Key, 1, Request, {Key, Value}).
 
 prepare_query(UserRequest, Opts) ->
-    StartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
-                   undefined ->
-                       [];
-                   ExclusiveStartKey ->
-                       [{<<"ExclusiveStartKey">>, ExclusiveStartKey}]
-               end,
-    MaxItemsLimit = case proplists:get_value(max_items, Opts) of
-                        undefined ->
-                            [];
-                        Limit ->
-                            [{<<"Limit">>, Limit}]
-                    end,
-
-    {StartKey ++ MaxItemsLimit ++ UserRequest}.
+    case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
+        undefined ->
+            {UserRequest};
+        ExclusiveStartKey ->
+            {UserRequest ++ [{<<"ExclusiveStartKey">>, ExclusiveStartKey}]}
+    end.
 
 -spec retry(target(), request(), [any()]) -> {ok, _} | {error, _}.
 retry(Op, Request, Opts) ->
