@@ -1,6 +1,7 @@
 %% @doc: DynamoDB client
 -module(current).
 
+
 %% DynamoDB API
 -export([
          batch_get_item/1,
@@ -282,31 +283,22 @@ split_batch(N, [H | T], Acc) -> split_batch(N-1, T, [H | Acc]).
 %%
 
 do_query(Request, Opts) ->
-    do_query(Request, {undefined, 0}, Opts).
+    do_query(Request, undefined, Opts).
 
-do_query({UserRequest}, {Acc, AccLen}, Opts) ->
-    ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
-                            undefined ->
-                                [];
-                            StartKey ->
-                                [{<<"ExclusiveStartKey">>, StartKey}]
-                        end,
-
-    Request = {ExclusiveStartKey ++ UserRequest},
-
+do_query({UserRequest}, Acc, Opts) ->
     IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
     Accumulate = case IsCount of
                      true ->
-                         fun (Count, {undefined, _}) -> {Count, Count};
-                             (Count, {A, _}) -> {Count + A, Count + A}
+                         fun (Count, undefined) -> Count;
+                             (Count, A) -> Count + A
                          end;
                      false ->
-                         fun (Items, {undefined, _}) -> {Items, length(Items)};
-                             (Items, {A, Len}) -> {Items ++ A, Len + length(Items)}
+                         fun (Items, undefined) -> Items;
+                             (Items, A) -> Items ++ A
                          end
                  end,
 
-    case retry('query', Request, Opts) of
+    case retry('query', {UserRequest}, Opts) of
         {ok, {Response}} ->
             Result = case IsCount of
                          true -> proplists:get_value(<<"Count">>, Response);
@@ -314,22 +306,18 @@ do_query({UserRequest}, {Acc, AccLen}, Opts) ->
                      end,
             case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
                 undefined ->
-                    {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
-                    {ok, ResultAcc};
+                    {ok, Accumulate(Result, Acc)};
                 LastEvaluatedKey ->
-                    {NewAcc, NewLen} = Accumulate(Result, {Acc, AccLen}),
-                    case proplists:get_value(max_items, Opts, infinity) > NewLen of
+                    NextRequest = update_query(UserRequest,
+                                               <<"ExclusiveStartKey">>,
+                                               LastEvaluatedKey),
+                    case proplists:is_defined(<<"Limit">>, NextRequest) of
                         true ->
-                            NextRequest = {lists:keystore(
-                                             <<"ExclusiveStartKey">>, 1,
-                                             UserRequest,
-                                             {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
-                            do_query(NextRequest, {NewAcc, NewLen}, Opts);
+                            {ok, Accumulate(Result, Acc), LastEvaluatedKey};
                         false ->
-                            {ok, NewAcc}
+                            do_query({NextRequest}, Accumulate(Result, Acc), Opts)
                     end
             end;
-
         {error, Reason} ->
             {error, Reason}
     end.
@@ -346,45 +334,53 @@ do_query({UserRequest}, {Acc, AccLen}, Opts) ->
 
 
 do_scan(Request, Opts) ->
-    do_scan(Request, [], Opts).
+    do_scan(Request, undefined, Opts).
 
 do_scan({UserRequest}, Acc, Opts) ->
-    ExclusiveStartKey = case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
-                            undefined ->
-                                [];
-                            StartKey ->
-                                [{<<"ExclusiveStartKey">>, StartKey}]
-                        end,
+    IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
+    Accumulate = case IsCount of
+                     true ->
+                         fun (Count, undefined) -> Count;
+                             (Count, A) -> Count + A
+                         end;
+                     false ->
+                         fun (Items, undefined) -> Items;
+                             (Items, A) -> Items ++ A
+                         end
+                 end,
 
-    Request = {ExclusiveStartKey ++ UserRequest},
-
-    case retry(scan, Request, Opts) of
+    case retry(scan, {UserRequest}, Opts) of
         {ok, {Response}} ->
-            Items = proplists:get_value(<<"Items">>, Response, []),
+            Result = case IsCount of
+                         true -> proplists:get_value(<<"Count">>, Response);
+                         false -> proplists:get_value(<<"Items">>, Response)
+                     end,
             case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
                 undefined ->
-                    {ok, Items ++ Acc};
+                    {ok, Accumulate(Result, Acc)};
                 LastEvaluatedKey ->
-                    NextRequest = {lists:keystore(
-                                     <<"ExclusiveStartKey">>, 1,
-                                     UserRequest,
-                                     {<<"ExclusiveStartKey">>, LastEvaluatedKey})},
-                    do_scan(NextRequest, Items ++ Acc, Opts)
+                    NextRequest = update_query(UserRequest,
+                                               <<"ExclusiveStartKey">>,
+                                               LastEvaluatedKey),
+                    case proplists:is_defined(<<"Limit">>, NextRequest) of
+                        true ->
+                            {ok, Accumulate(Result, Acc), LastEvaluatedKey};
+                        false ->
+                            do_query({NextRequest}, Accumulate(Result, Acc), Opts)
+                    end
             end;
-
         {error, Reason} ->
             {error, Reason}
     end.
 
 
 
-
-
-
-
 %%
 %% INTERNALS
 %%
+
+update_query(Request, Key, Value) ->
+    lists:keystore(Key, 1, Request, {Key, Value}).
 
 -spec retry(target(), request(), [any()]) -> {ok, _} | {error, _}.
 retry(Op, Request, Opts) ->
@@ -640,4 +636,3 @@ ymd(Now) ->
 
 callback_mod() ->
     application:get_env(current, callback_mod, current_callback).
-

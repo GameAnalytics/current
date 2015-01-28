@@ -137,6 +137,8 @@ batch_get_unprocessed_items() ->
 
 scan() ->
     ok = create_table(?TABLE),
+    ok = clear_table(?TABLE),
+
     RequestItems = [begin
                         {[{<<"PutRequest">>,
                            {[{<<"Item">>,
@@ -159,8 +161,25 @@ scan() ->
     %% Errors
     ErrorQ = {[{<<"TableName">>, <<"non-existing-table">>}]},
     ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
-                 current:scan(ErrorQ, [])).
+                 current:scan(ErrorQ, [])),
 
+    %% Limit and pagging
+    Q1 = {[{<<"TableName">>, ?TABLE},
+          {<<"Limit">>, 80}]},
+    {ok, LimitedItems1, LastEvaluatedKey1} = current:scan(Q1),
+    ?assertEqual(80, length(LimitedItems1)),
+
+    %% Pagging last page
+    Q2 = {[{<<"TableName">>, ?TABLE},
+           {<<"ExclusiveStartKey">>, LastEvaluatedKey1},
+           {<<"Limit">>, 30}]},
+    {ok, LimitedItems2} = current:scan(Q2),
+
+    %% check for overlaps
+    ?assertEqual(0, sets:size(sets:intersection(sets:from_list(LimitedItems1),
+                                                sets:from_list(LimitedItems2)))),
+
+    ?assertEqual(20, length(LimitedItems2)).
 
 
 take_write_batch_test() ->
@@ -234,10 +253,10 @@ q() ->
           {<<"KeyConditions">>,
            {[{<<"hash_key">>,
               {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
-                {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
-          {<<"Limit">>, 10}]},
+                {<<"ComparisonOperator">>, <<"EQ">>}]}}]}}]},
 
     {ok, ResultItems} = current:q(Q, []),
+
     ?assertEqual(lists:sort(Items), lists:sort(ResultItems)),
 
     %% Count
@@ -246,7 +265,6 @@ q() ->
                 {[{<<"hash_key">>,
                    {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
                      {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
-               {<<"Limit">>, 10},
                {<<"Select">>, <<"COUNT">>}]},
     {ok, ResultCount} = current:q(CountQ, []),
     ?assertEqual(100, ResultCount),
@@ -256,15 +274,36 @@ q() ->
                {<<"KeyConditions">>,
                 {[{<<"hash_key">>,
                    {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
-                     {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
-               {<<"Limit">>, 10}]},
+                     {<<"ComparisonOperator">>, <<"EQ">>}]}}]}}]},
     ?assertMatch({error, {<<"ResourceNotFoundException">>, _}},
                  current:q(ErrorQ, [])),
 
-    %% Limit
-    {ok, LimitedItems} = current:q(Q, [{max_items, 10}]),
-    ?assertEqual(10, length(LimitedItems)).
+    %% Limit and pagging
+    Q1 = {[{<<"TableName">>, ?TABLE},
+           {<<"KeyConditions">>,
+            {[{<<"hash_key">>,
+               {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
+                 {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
+          {<<"Limit">>, 80}]},
+    {ok, LimitedItems1, LastEvaluatedKey1} = current:q(Q1),
+    ?assertEqual(80, length(LimitedItems1)),
 
+    %% Pagging last page
+    Q2 = {[{<<"TableName">>, ?TABLE},
+          {<<"KeyConditions">>,
+           {[{<<"hash_key">>,
+              {[{<<"AttributeValueList">>, [{[{<<"N">>, <<"1">>}]}]},
+                {<<"ComparisonOperator">>, <<"EQ">>}]}}]}},
+           {<<"ExclusiveStartKey">>, LastEvaluatedKey1},
+           {<<"Limit">>, 30}]},
+    {ok, LimitedItems2} = current:q(Q2),
+
+    %% check for overlaps
+    ?assertEqual(0, sets:size(
+                      sets:intersection(sets:from_list(LimitedItems1),
+                                        sets:from_list(LimitedItems2)))),
+
+    ?assertEqual(20, length(LimitedItems2)).
 
 
 get_put_update_delete() ->
@@ -455,7 +494,14 @@ setup() ->
     application:start(carpool),
     application:start(party),
 
-    File = filename:join([code:priv_dir(current), "aws_credentials.term"]),
+    %% Make travis-ci use different env/config we do not need valid
+    %% credentials for CI since we are using local DynamDB
+    Environment = case os:getenv("TRAVIS") of
+                      "true" -> "aws_credentials.term.template";
+                      false  -> "aws_credentials.term"
+                  end,
+
+    File = filename:join([code:priv_dir(current), Environment]),
     {ok, Cred} = file:consult(File),
     AccessKey = proplists:get_value(access_key, Cred),
     SecretAccessKey = proplists:get_value(secret_access_key, Cred),
