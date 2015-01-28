@@ -285,20 +285,20 @@ split_batch(N, [H | T], Acc) -> split_batch(N-1, T, [H | Acc]).
 %%
 
 do_query(Request, Opts) ->
-    do_query(Request, {undefined, 0}, Opts).
+    do_query(Request, undefined, Opts).
 
 %%TODO: there is a lot of similarities with do_scan/3
-do_query({UserRequest}, {Acc, AccLen}, Opts) ->
+do_query({UserRequest}, Acc, Opts) ->
     Request = prepare_query(UserRequest, Opts),
     IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
     Accumulate = case IsCount of
                      true ->
-                         fun (Count, {undefined, _}) -> {Count, Count};
-                             (Count, {A, _}) -> {Count + A, Count + A}
+                         fun (Count, undefined) -> Count;
+                             (Count, A) -> Count + A
                          end;
                      false ->
-                         fun (Items, {undefined, _}) -> {Items, length(Items)};
-                             (Items, {A, Len}) -> {Items ++ A, Len + length(Items)}
+                         fun (Items, undefined) -> Items;
+                             (Items, A) -> Items ++ A
                          end
                  end,
 
@@ -308,12 +308,20 @@ do_query({UserRequest}, {Acc, AccLen}, Opts) ->
                          true -> proplists:get_value(<<"Count">>, Response);
                          false -> proplists:get_value(<<"Items">>, Response)
                      end,
-            {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
             case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
                 undefined ->
-                    {ok, ResultAcc};
+                    {ok, Accumulate(Result, Acc)};
                 LastEvaluatedKey ->
-                    {ok, ResultAcc, LastEvaluatedKey}
+                    NextRequest = lists:keystore(
+                                     <<"ExclusiveStartKey">>, 1,
+                                     UserRequest,
+                                     {<<"ExclusiveStartKey">>, LastEvaluatedKey}),
+                    case proplists:is_defined(<<"Limit">>, NextRequest) of
+                        true ->
+                            {ok, Accumulate(Result, Acc), LastEvaluatedKey};
+                        false ->
+                            do_query({NextRequest}, Accumulate(Result, Acc), Opts)
+                    end
             end;
         {error, Reason} ->
             {error, Reason}
@@ -331,20 +339,20 @@ do_query({UserRequest}, {Acc, AccLen}, Opts) ->
 
 
 do_scan(Request, Opts) ->
-    do_scan(Request, {undefined, 0}, Opts).
+    do_scan(Request, undefined, Opts).
 
 %%TODO: there is a lot of similarities with do_query/3
-do_scan({UserRequest}, {Acc, AccLen}, Opts) ->
+do_scan({UserRequest}, Acc, Opts) ->
     Request = prepare_query(UserRequest, Opts),
     IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
     Accumulate = case IsCount of
                      true ->
-                         fun (Count, {undefined, _}) -> {Count, Count};
-                             (Count, {A, _}) -> {Count + A, Count + A}
+                         fun (Count, undefined) -> Count;
+                             (Count, A) -> Count + A
                          end;
                      false ->
-                         fun (Items, {undefined, _}) -> {Items, length(Items)};
-                             (Items, {A, Len}) -> {Items ++ A, Len + length(Items)}
+                         fun (Items, undefined) -> Items;
+                             (Items, A) -> Items ++ A
                          end
                  end,
 
@@ -354,12 +362,20 @@ do_scan({UserRequest}, {Acc, AccLen}, Opts) ->
                          true -> proplists:get_value(<<"Count">>, Response);
                          false -> proplists:get_value(<<"Items">>, Response)
                      end,
-            {ResultAcc, _} = Accumulate(Result, {Acc, AccLen}),
             case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
                 undefined ->
-                    {ok, ResultAcc};
+                    {ok, Accumulate(Result, Acc)};
                 LastEvaluatedKey ->
-                    {ok, ResultAcc, LastEvaluatedKey}
+                    NextRequest = lists:keystore(
+                                    <<"ExclusiveStartKey">>, 1,
+                                    UserRequest,
+                                    {<<"ExclusiveStartKey">>, LastEvaluatedKey}),
+                    case proplists:is_defined(<<"Limit">>, NextRequest) of
+                        true ->
+                            {ok, Accumulate(Result, Acc), LastEvaluatedKey};
+                        false ->
+                            do_query({NextRequest}, Accumulate(Result, Acc), Opts)
+                    end
             end;
         {error, Reason} ->
             {error, Reason}
