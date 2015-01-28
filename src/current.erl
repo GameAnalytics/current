@@ -285,7 +285,7 @@ split_batch(N, [H | T], Acc) -> split_batch(N-1, T, [H | Acc]).
 do_query(Request, Opts) ->
     do_query(Request, undefined, Opts).
 
-do_query(UserRequest, Acc, Opts) ->
+do_query({UserRequest}, Acc, Opts) ->
     IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
     Accumulate = case IsCount of
                      true ->
@@ -298,7 +298,7 @@ do_query(UserRequest, Acc, Opts) ->
                          end
                  end,
 
-    case retry('query', UserRequest, Opts) of
+    case retry('query', {UserRequest}, Opts) of
         {ok, {Response}} ->
             Result = case IsCount of
                          true -> proplists:get_value(<<"Count">>, Response);
@@ -336,7 +336,7 @@ do_query(UserRequest, Acc, Opts) ->
 do_scan(Request, Opts) ->
     do_scan(Request, undefined, Opts).
 
-do_scan(UserRequest, Acc, Opts) ->
+do_scan({UserRequest}, Acc, Opts) ->
     IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
     Accumulate = case IsCount of
                      true ->
@@ -349,7 +349,7 @@ do_scan(UserRequest, Acc, Opts) ->
                          end
                  end,
 
-    case retry(scan, UserRequest, Opts) of
+    case retry(scan, {UserRequest}, Opts) of
         {ok, {Response}} ->
             Result = case IsCount of
                          true -> proplists:get_value(<<"Count">>, Response);
