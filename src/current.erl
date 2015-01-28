@@ -1,8 +1,6 @@
 %% @doc: DynamoDB client
 -module(current).
 
-%%FIXME: this is only for debugging!!!
--include_lib("eunit/include/eunit.hrl").
 
 %% DynamoDB API
 -export([
@@ -287,9 +285,7 @@ split_batch(N, [H | T], Acc) -> split_batch(N-1, T, [H | Acc]).
 do_query(Request, Opts) ->
     do_query(Request, undefined, Opts).
 
-%%TODO: there is a lot of similarities with do_scan/3
-do_query({UserRequest}, Acc, Opts) ->
-    Request = prepare_query(UserRequest, Opts),
+do_query(UserRequest, Acc, Opts) ->
     IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
     Accumulate = case IsCount of
                      true ->
@@ -302,7 +298,7 @@ do_query({UserRequest}, Acc, Opts) ->
                          end
                  end,
 
-    case retry('query', Request, Opts) of
+    case retry('query', UserRequest, Opts) of
         {ok, {Response}} ->
             Result = case IsCount of
                          true -> proplists:get_value(<<"Count">>, Response);
@@ -312,10 +308,9 @@ do_query({UserRequest}, Acc, Opts) ->
                 undefined ->
                     {ok, Accumulate(Result, Acc)};
                 LastEvaluatedKey ->
-                    NextRequest = lists:keystore(
-                                     <<"ExclusiveStartKey">>, 1,
-                                     UserRequest,
-                                     {<<"ExclusiveStartKey">>, LastEvaluatedKey}),
+                    NextRequest = update_query(UserRequest,
+                                               <<"ExclusiveStartKey">>,
+                                               LastEvaluatedKey),
                     case proplists:is_defined(<<"Limit">>, NextRequest) of
                         true ->
                             {ok, Accumulate(Result, Acc), LastEvaluatedKey};
@@ -341,9 +336,7 @@ do_query({UserRequest}, Acc, Opts) ->
 do_scan(Request, Opts) ->
     do_scan(Request, undefined, Opts).
 
-%%TODO: there is a lot of similarities with do_query/3
-do_scan({UserRequest}, Acc, Opts) ->
-    Request = prepare_query(UserRequest, Opts),
+do_scan(UserRequest, Acc, Opts) ->
     IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
     Accumulate = case IsCount of
                      true ->
@@ -356,7 +349,7 @@ do_scan({UserRequest}, Acc, Opts) ->
                          end
                  end,
 
-    case retry(scan, Request, Opts) of
+    case retry(scan, UserRequest, Opts) of
         {ok, {Response}} ->
             Result = case IsCount of
                          true -> proplists:get_value(<<"Count">>, Response);
@@ -366,10 +359,9 @@ do_scan({UserRequest}, Acc, Opts) ->
                 undefined ->
                     {ok, Accumulate(Result, Acc)};
                 LastEvaluatedKey ->
-                    NextRequest = lists:keystore(
-                                    <<"ExclusiveStartKey">>, 1,
-                                    UserRequest,
-                                    {<<"ExclusiveStartKey">>, LastEvaluatedKey}),
+                    NextRequest = update_query(UserRequest,
+                                               <<"ExclusiveStartKey">>,
+                                               LastEvaluatedKey),
                     case proplists:is_defined(<<"Limit">>, NextRequest) of
                         true ->
                             {ok, Accumulate(Result, Acc), LastEvaluatedKey};
@@ -389,14 +381,6 @@ do_scan({UserRequest}, Acc, Opts) ->
 
 update_query(Request, Key, Value) ->
     lists:keystore(Key, 1, Request, {Key, Value}).
-
-prepare_query(UserRequest, Opts) ->
-    case proplists:get_value(<<"ExclusiveStartKey">>, UserRequest) of
-        undefined ->
-            {UserRequest};
-        ExclusiveStartKey ->
-            {UserRequest ++ [{<<"ExclusiveStartKey">>, ExclusiveStartKey}]}
-    end.
 
 -spec retry(target(), request(), [any()]) -> {ok, _} | {error, _}.
 retry(Op, Request, Opts) ->
