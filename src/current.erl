@@ -447,14 +447,17 @@ do(Operation, {UserRequest}, Opts) ->
               ],
     Signed = [{<<"Authorization">>, authorization(Headers, Body, Now)}
               | Headers],
+    SignedStr = lists:map(fun ({K, V}) ->
+                                      {binary_to_list(K), binary_to_list(V)}
+                              end, Signed),
 
-    ServerTimeout = proplists:get_value(server_timeout, Opts, 5000),
     CallTimeout = proplists:get_value(call_timeout, Opts, 10000),
-    ClaimTimeout = proplists:get_value(claim_timeout, Opts, 1000), %% us
+    MaxConns = proplists:get_value(max_connections, Opts, 10),
 
-    case party:post(URL, Signed, Body, [{server_timeout, ServerTimeout},
-                                        {call_timeout, CallTimeout},
-                                        {claim_timeout, ClaimTimeout}]) of
+    Resp = lhttpc:request(binary_to_list(URL), "POST", SignedStr, Body,
+                            CallTimeout, [{max_connections, MaxConns}]),
+
+    case Resp of
         {ok, {{200, _}, _, ResponseBody}} ->
             {ok, jiffy:decode(ResponseBody)};
 
