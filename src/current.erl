@@ -451,10 +451,12 @@ do(Operation, {UserRequest}, Opts) ->
     ServerTimeout = proplists:get_value(server_timeout, Opts, 5000),
     CallTimeout = proplists:get_value(call_timeout, Opts, 10000),
     ClaimTimeout = proplists:get_value(claim_timeout, Opts, 1000), %% us
+    PartySocket = proplists:get_value(party_socket, Opts),
 
     case party:post(URL, Signed, Body, [{server_timeout, ServerTimeout},
                                         {call_timeout, CallTimeout},
-                                        {claim_timeout, ClaimTimeout}]) of
+                                        {claim_timeout, ClaimTimeout},
+                                        {party_socket, PartySocket}]) of
         {ok, {{200, _}, _, ResponseBody}} ->
             {ok, jiffy:decode(ResponseBody)};
 
