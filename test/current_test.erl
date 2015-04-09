@@ -491,8 +491,7 @@ authz(Name) ->
 
 
 setup() ->
-    application:start(carpool),
-    application:start(party),
+    {ok, [carpool, party]} = application:ensure_all_started(party),
 
     %% Make travis-ci use different env/config we do not need valid
     %% credentials for CI since we are using local DynamDB
@@ -514,7 +513,7 @@ setup() ->
 
     ok = party:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2),
 
-    application:start(current).
+    {ok, _} = application:ensure_all_started(current).
 
 teardown(_) ->
     application:stop(current).
