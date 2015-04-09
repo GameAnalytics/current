@@ -384,16 +384,17 @@ update_query(Request, Key, Value) ->
 
 -spec retry(target(), request(), [any()]) -> {ok, _} | {error, _}.
 retry(Op, Request, Opts) ->
+    Body = encode_body(Op, Request),
     case proplists:is_defined(no_retry, Opts) of
         true ->
-            do(Op, Request, timeout(Opts));
+            do(Op, Body, timeout(Opts));
         false ->
-            retry(Op, Request, 0, os:timestamp(), Opts)
+            retry(Op, Body, 0, os:timestamp(), Opts)
     end.
 
-retry(Op, Request, Retries, Start, Opts) ->
+retry(Op, Body, Retries, Start, Opts) ->
     RequestStart = os:timestamp(),
-    case do(Op, Request, Opts) of
+    case do(Op, Body, Opts) of
         {ok, Response} ->
 
             case proplists:get_value(<<"ConsumedCapacity">>,
@@ -417,7 +418,7 @@ retry(Op, Request, Retries, Start, Opts) ->
                             BackoffTime = min(max_backoff(Opts),
                                               trunc(math:pow(2, Retries) * 50)),
                             timer:sleep(BackoffTime),
-                            retry(Op, Request, Retries+1, Start, Opts)
+                            retry(Op, Body, Retries+1, Start, Opts)
                     end;
                 false ->
                     Error
@@ -425,18 +426,8 @@ retry(Op, Request, Retries, Start, Opts) ->
     end.
 
 
-do(Operation, {UserRequest}, Opts) ->
+do(Operation, Body, Opts) ->
     Now = edatetime:now2ts(),
-
-    Request = case Operation of
-        Op when Op == delete_table; Op == describe_table; Op == create_table ->
-            {UserRequest};
-        _Other ->
-            {lists:keystore(<<"ReturnConsumedCapacity">>, 1, UserRequest,
-                              {<<"ReturnConsumedCapacity">>, <<"TOTAL">>})}
-    end,
-
-    Body = jiffy:encode(Request),
 
     URL = <<"http://", (endpoint())/binary, "/">>,
     Headers = [
@@ -607,7 +598,18 @@ to_lower(Binary) when is_binary(Binary) ->
 to_lower(List) ->
     string:to_lower(List).
 
-
+encode_body(Operation, {UserRequest}) ->
+    Request = case Operation of
+                  Op when Op =:= delete_table;
+                          Op =:= describe_table;
+                          Op =:= create_table ->
+                      {UserRequest};
+                  _Other ->
+                      {lists:keystore(
+                         <<"ReturnConsumedCapacity">>, 1, UserRequest,
+                         {<<"ReturnConsumedCapacity">>, <<"TOTAL">>})}
+              end,
+    jiffy:encode(Request).
 
 region() ->
     {ok, Region} = application:get_env(current, region),
