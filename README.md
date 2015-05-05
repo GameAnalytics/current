@@ -34,7 +34,7 @@ Example usage:
 {ok,[party,current]}
 2> party:connect(<<"http://dynamodb.us-east-1.amazonaws.com">>, 2).
 ok
-3> application:set_env(current, endpoint, <<"us-east-1">>).
+3> application:set_env(current, region, <<"us-east-1">>).
 ok
 4> application:set_env(current, access_key, <<"foo">>).
 ok
