@@ -26,6 +26,7 @@
          q/2,
          scan/1,
          scan/2,
+         scan_once/2,
          update_item/1,
          update_item/2,
          update_table/1,
@@ -88,6 +89,7 @@ put_item(Request)               -> retry(put_item, Request, []).
 put_item(Request, Opts)         -> retry(put_item, Request, Opts).
 q(Request)                      -> do_query(Request, []).
 q(Request, Opts)                -> do_query(Request, Opts).
+scan_once(Request, Opts)        -> retry(scan, Request, Opts).
 scan(Request)                   -> do_scan(Request, []).
 scan(Request, Opts)             -> do_scan(Request, Opts).
 update_item(Request)            -> retry(update_item, Request, []).
