@@ -8,6 +8,7 @@
          batch_get_item/2,
          batch_write_item/1,
          batch_write_item/2,
+         batch_write_item_once/2,
          create_table/1,
          create_table/2,
          delete_item/1,
@@ -73,6 +74,7 @@ batch_get_item(Request)         -> do_batch_get_item(Request, []).
 batch_get_item(Request, Opts)   -> do_batch_get_item(Request, Opts).
 batch_write_item(Request)       -> do_batch_write_item(Request, []).
 batch_write_item(Request, Opts) -> do_batch_write_item(Request, Opts).
+batch_write_item_once(Request, Opts) -> retry(batch_write_item, Request, Opts).
 create_table(Request)           -> retry(create_table, Request, []).
 create_table(Request, Opts)     -> retry(create_table, Request, Opts).
 delete_item(Request)            -> retry(delete_item, Request, []).
