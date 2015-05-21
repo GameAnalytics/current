@@ -370,7 +370,7 @@ do_scan({UserRequest}, Acc, Opts) ->
                         true ->
                             {ok, Accumulate(Result, Acc), LastEvaluatedKey};
                         false ->
-                            do_query({NextRequest}, Accumulate(Result, Acc), Opts)
+                            do_scan({NextRequest}, Accumulate(Result, Acc), Opts)
                     end
             end;
         {error, Reason} ->
