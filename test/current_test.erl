@@ -76,9 +76,8 @@ batch_get_write_item() ->
     {ok, [{?TABLE_OTHER, Table1}, {?TABLE, Table2}]} =
         current:batch_get_item(GetRequest),
 
-    ?assertEqual(lists:sort(Keys), lists:sort(Table1)),
-    ?assertEqual(lists:sort(Keys), lists:sort(Table2)).
-
+    ?assertEqual(key_sort(Keys), key_sort(Table1)),
+    ?assertEqual(key_sort(Keys), key_sort(Table2)).
 
 batch_get_unprocessed_items() ->
     ok = create_table(?TABLE),
@@ -128,8 +127,8 @@ batch_get_unprocessed_items() ->
     {ok, [{?TABLE_OTHER, Table1}, {?TABLE, Table2}]} =
         current:batch_get_item(GetRequest, []),
 
-    ?assertEqual(lists:sort(Keys), lists:sort(Table1)),
-    ?assertEqual(lists:sort(Keys), lists:sort(Table2)),
+    ?assertEqual(key_sort(Keys), key_sort(Table1)),
+    ?assertEqual(key_sort(Keys), key_sort(Table2)),
 
     ?assert(meck:validate(party)),
     ok = meck:unload(party).
@@ -257,7 +256,7 @@ q() ->
 
     {ok, ResultItems} = current:q(Q, []),
 
-    ?assertEqual(lists:sort(Items), lists:sort(ResultItems)),
+    ?assertEqual(key_sort(Items), key_sort(ResultItems)),
 
     %% Count
     CountQ = {[{<<"TableName">>, ?TABLE},
@@ -487,8 +486,15 @@ authz(Name) ->
                 filename:join(["../test", "aws4_testsuite", Name ++ ".authz"])),
     binary:replace(B, <<"\r\n">>, <<"\n">>, [global]).
 
+key_sort(L) ->
+    lists:sort(normalize_key_order(L, [])).
 
-
+normalize_key_order([], Acc) ->
+    lists:reverse(Acc);
+normalize_key_order([{H} | T], Acc) ->
+    K1 = proplists:get_value(<<"range_key">>, H),
+    K2 = proplists:get_value(<<"hash_key">>, H),
+    normalize_key_order(T, [{[K1, K2]} | Acc]).
 
 setup() ->
     {ok, _} = application:ensure_all_started(party),
