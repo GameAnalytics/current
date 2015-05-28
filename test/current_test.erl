@@ -16,15 +16,15 @@ current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
       {timeout, 120, ?_test(table_manipulation())},
-      {timeout, 30, ?_test(batch_get_write_item())},
-      {timeout, 30, ?_test(batch_get_unprocessed_items())},
-      {timeout, 30, ?_test(scan())},
-      {timeout, 30, ?_test(q())},
-      {timeout, 30, ?_test(get_put_update_delete())},
-      {timeout, 30, ?_test(retry_with_timeout())},
-      {timeout, 30, ?_test(timeout())},
-      {timeout, 30, ?_test(throttled())},
-      {timeout, 30, ?_test(non_json_error())}
+      {timeout, 30,  ?_test(batch_get_write_item())},
+      {timeout, 30,  ?_test(batch_get_unprocessed_items())},
+      {timeout, 30,  ?_test(scan())},
+      {timeout, 30,  ?_test(q())},
+      {timeout, 30,  ?_test(get_put_update_delete())},
+      {timeout, 30,  ?_test(retry_with_timeout())},
+      {timeout, 30,  ?_test(timeout())},
+      {timeout, 30,  ?_test(throttled())},
+      {timeout, 30,  ?_test(non_json_error())}
      ]}.
 
 
@@ -101,8 +101,8 @@ batch_get_unprocessed_items() ->
     UnprocessedKeys = {[{?TABLE, {[{<<"Keys">>, Keys2}]}},
                         {?TABLE_OTHER, {[{<<"Keys">>, Keys2}]}}
                        ]},
-    meck:new(party, [passthrough]),
-    meck:expect(party, post, 4,
+    meck:new(current_http_client, [passthrough]),
+    meck:expect(current_http_client, post, 4,
                 meck:seq([fun (URL, Headers, Body, Opts) ->
                                   {ok, {{200, <<"OK">>}, ResponseHeaders, ResponseBody}} =
                                        meck:passthrough([URL, Headers, Body, Opts]),
@@ -127,11 +127,13 @@ batch_get_unprocessed_items() ->
     {ok, [{?TABLE_OTHER, Table1}, {?TABLE, Table2}]} =
         current:batch_get_item(GetRequest, []),
 
+    file:write_file("/tmp/1.txt", io_lib:format("~p", [key_sort(Keys)]), [write]),
+    file:write_file("/tmp/2.txt", io_lib:format("~p", [key_sort(Table1)]), [write]),
+
     ?assertEqual(key_sort(Keys), key_sort(Table1)),
     ?assertEqual(key_sort(Keys), key_sort(Table2)),
 
-    ?assert(meck:validate(party)),
-    ok = meck:unload(party).
+    meck:unload(current_http_client).
 
 
 scan() ->
@@ -355,16 +357,16 @@ get_put_update_delete() ->
 
 
 retry_with_timeout() ->
-    meck:new(party, [passthrough]),
-    meck:expect(party, post, fun (_, _, _, _) ->
-                                         {error, claim_timeout}
+    meck:new(current_http_client, [passthrough]),
+    meck:expect(current_http_client, post, fun (_, _, _, _) ->
+                                            ?debugFmt("called", []),
+                                            {error, claim_timeout}
                                  end),
-
     ?assertEqual({error, max_retries},
                  current:describe_table({[{<<"TableName">>, ?TABLE}]},
                                         [{retries, 3}])),
 
-    meck:unload(party).
+    meck:unload(current_http_client).
 
 timeout() ->
     ?assertEqual({error, max_retries},
@@ -384,8 +386,8 @@ throttled() ->
                                 {[{'__type',  E},
                                   {message, <<"foobar">>}]})}},
 
-    meck:new(party, [passthrough]),
-    meck:expect(party, post, 4,
+    meck:new(current_http_client, [passthrough]),
+    meck:expect(current_http_client, post, 4,
                 meck_ret_spec:seq(
                   [ThrottledResponse,
                    ThrottledResponse,
@@ -403,12 +405,12 @@ throttled() ->
 
     ?assertEqual(ok, current:batch_write_item(WriteRequest, [{retries, 3}])),
 
-    meck:unload(party).
+    meck:unload(current_http_client).
 
 non_json_error() ->
-    meck:new(party, [passthrough]),
-    PartyResponse = {ok, {{413, ""}, [], <<"not a json response!">>}},
-    meck:expect(party, post, 4, PartyResponse),
+    meck:new(current_http_client, [passthrough]),
+    CurrentResponse = {ok, {{413, ""}, [], <<"not a json response!">>}},
+    meck:expect(current_http_client, post, 4, CurrentResponse),
 
     Key = {[{<<"hash_key">>, ?NUMBER(1)},
             {<<"range_key">>, ?NUMBER(1)}]},
@@ -418,7 +420,7 @@ non_json_error() ->
     ?assertEqual({error, {413, <<"not a json response!">>}},
                  Response),
 
-    meck:unload(party).
+    meck:unload(current_http_client).
 
 
 
@@ -492,12 +494,12 @@ key_sort(L) ->
 normalize_key_order([], Acc) ->
     lists:reverse(Acc);
 normalize_key_order([{H} | T], Acc) ->
-    K1 = proplists:get_value(<<"range_key">>, H),
-    K2 = proplists:get_value(<<"hash_key">>, H),
-    normalize_key_order(T, [{[K1, K2]} | Acc]).
+    K1 = proplists:get_value(<<"hash_key">>, H),
+    K2 = proplists:get_value(<<"range_key">>, H),
+    normalize_key_order(T, [{[{<<"hash_key">>, K1}, {<<"range_key">>, K2}]} | Acc]).
 
 setup() ->
-    {ok, _} = application:ensure_all_started(party),
+    {ok, _} = application:ensure_all_started(current),
 
     %% Make travis-ci use different env/config we do not need valid
     %% credentials for CI since we are using local DynamDB

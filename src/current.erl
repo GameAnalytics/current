@@ -1,7 +1,6 @@
 %% @doc: DynamoDB client
 -module(current).
 
-
 %% DynamoDB API
 -export([
          batch_get_item/1,
@@ -70,34 +69,34 @@
 %%
 
 
-batch_get_item(Request)         -> do_batch_get_item(Request, []).
-batch_get_item(Request, Opts)   -> do_batch_get_item(Request, Opts).
-batch_write_item(Request)       -> do_batch_write_item(Request, []).
-batch_write_item(Request, Opts) -> do_batch_write_item(Request, Opts).
+batch_get_item(Request)              -> do_batch_get_item(Request, []).
+batch_get_item(Request, Opts)        -> do_batch_get_item(Request, Opts).
+batch_write_item(Request)            -> do_batch_write_item(Request, []).
+batch_write_item(Request, Opts)      -> do_batch_write_item(Request, Opts).
 batch_write_item_once(Request, Opts) -> retry(batch_write_item, Request, Opts).
-create_table(Request)           -> retry(create_table, Request, []).
-create_table(Request, Opts)     -> retry(create_table, Request, Opts).
-delete_item(Request)            -> retry(delete_item, Request, []).
-delete_item(Request, Opts)      -> retry(delete_item, Request, Opts).
-delete_table(Request)           -> retry(delete_table, Request, []).
-delete_table(Request, Opts)     -> retry(delete_table, Request, Opts).
-describe_table(Request)         -> retry(describe_table, Request, []).
-describe_table(Request, Opts)   -> retry(describe_table, Request, Opts).
-get_item(Request)               -> retry(get_item, Request, []).
-get_item(Request, Opts)         -> retry(get_item, Request, Opts).
-list_tables(Request)            -> retry(list_tables, Request, []).
-list_tables(Request, Opts)      -> retry(list_tables, Request, Opts).
-put_item(Request)               -> retry(put_item, Request, []).
-put_item(Request, Opts)         -> retry(put_item, Request, Opts).
-q(Request)                      -> do_query(Request, []).
-q(Request, Opts)                -> do_query(Request, Opts).
-scan_once(Request, Opts)        -> retry(scan, Request, Opts).
-scan(Request)                   -> do_scan(Request, []).
-scan(Request, Opts)             -> do_scan(Request, Opts).
-update_item(Request)            -> retry(update_item, Request, []).
-update_item(Request, Opts)      -> retry(update_item, Request, Opts).
-update_table(Request)           -> retry(update_table, Request, []).
-update_table(Request, Opts)     -> retry(update_table, Request, Opts).
+create_table(Request)                -> retry(create_table, Request, []).
+create_table(Request, Opts)          -> retry(create_table, Request, Opts).
+delete_item(Request)                 -> retry(delete_item, Request, []).
+delete_item(Request, Opts)           -> retry(delete_item, Request, Opts).
+delete_table(Request)                -> retry(delete_table, Request, []).
+delete_table(Request, Opts)          -> retry(delete_table, Request, Opts).
+describe_table(Request)              -> retry(describe_table, Request, []).
+describe_table(Request, Opts)        -> retry(describe_table, Request, Opts).
+get_item(Request)                    -> retry(get_item, Request, []).
+get_item(Request, Opts)              -> retry(get_item, Request, Opts).
+list_tables(Request)                 -> retry(list_tables, Request, []).
+list_tables(Request, Opts)           -> retry(list_tables, Request, Opts).
+put_item(Request)                    -> retry(put_item, Request, []).
+put_item(Request, Opts)              -> retry(put_item, Request, Opts).
+q(Request)                           -> do_query(Request, []).
+q(Request, Opts)                     -> do_query(Request, Opts).
+scan_once(Request, Opts)             -> retry(scan, Request, Opts).
+scan(Request)                        -> do_scan(Request, []).
+scan(Request, Opts)                  -> do_scan(Request, Opts).
+update_item(Request)                 -> retry(update_item, Request, []).
+update_item(Request, Opts)           -> retry(update_item, Request, Opts).
+update_table(Request)                -> retry(update_table, Request, []).
+update_table(Request, Opts)          -> retry(update_table, Request, Opts).
 
 
 
@@ -138,9 +137,6 @@ wait_for_delete(Table, Timeout) ->
 %% ============================================================================
 %% IMPLEMENTATION
 %% ============================================================================
-
-
-
 
 %%
 %% BATCH GET AND WRITE
@@ -290,22 +286,13 @@ do_query(Request, Opts) ->
     do_query(Request, undefined, Opts).
 
 do_query({UserRequest}, Acc, Opts) ->
-    IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
-    Accumulate = case IsCount of
-                     true ->
-                         fun (Count, undefined) -> Count;
-                             (Count, A) -> Count + A
-                         end;
-                     false ->
-                         fun (Items, undefined) -> Items;
-                             (Items, A) -> Items ++ A
-                         end
-                 end,
+    IsCount    = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
+    Accumulate = get_accumulate_fun(IsCount),
 
     case retry('query', {UserRequest}, Opts) of
         {ok, {Response}} ->
             Result = case IsCount of
-                         true -> proplists:get_value(<<"Count">>, Response);
+                         true  -> proplists:get_value(<<"Count">>, Response);
                          false -> proplists:get_value(<<"Items">>, Response)
                      end,
             case proplists:get_value(<<"LastEvaluatedKey">>, Response) of
@@ -326,9 +313,14 @@ do_query({UserRequest}, Acc, Opts) ->
             {error, Reason}
     end.
 
-
-
-
+get_accumulate_fun(true) ->
+    fun (Count, undefined) -> Count;
+        (Count, A) -> Count + A
+    end;
+get_accumulate_fun(false) ->
+    fun (Items, undefined) -> Items;
+        (Items, A) -> Items ++ A
+    end.
 
 
 
@@ -341,17 +333,8 @@ do_scan(Request, Opts) ->
     do_scan(Request, undefined, Opts).
 
 do_scan({UserRequest}, Acc, Opts) ->
-    IsCount = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
-    Accumulate = case IsCount of
-                     true ->
-                         fun (Count, undefined) -> Count;
-                             (Count, A) -> Count + A
-                         end;
-                     false ->
-                         fun (Items, undefined) -> Items;
-                             (Items, A) -> Items ++ A
-                         end
-                 end,
+    IsCount    = proplists:get_value(<<"Select">>, UserRequest) =:= <<"COUNT">>,
+    Accumulate = get_accumulate_fun(IsCount),
 
     case retry(scan, {UserRequest}, Opts) of
         {ok, {Response}} ->
@@ -378,7 +361,6 @@ do_scan({UserRequest}, Acc, Opts) ->
     end.
 
 
-
 %%
 %% INTERNALS
 %%
@@ -390,68 +372,45 @@ update_query(Request, Key, Value) ->
 retry(Op, Request, Opts) ->
     Body = encode_body(Op, Request),
     case proplists:is_defined(no_retry, Opts) of
-        true ->
-            do(Op, Body, timeout(Opts));
-        false ->
-            retry(Op, Body, 0, os:timestamp(), Opts)
+        true  -> do(Op, Body, opts_timeout(Opts));
+        false -> retry(Op, Body, 0, os:timestamp(), Opts)
     end.
 
 retry(Op, Body, Retries, Start, Opts) ->
     RequestStart = os:timestamp(),
     case do(Op, Body, Opts) of
         {ok, Response} ->
-
             case proplists:get_value(<<"ConsumedCapacity">>,
                                      element(1, Response)) of
-                undefined -> ok;
-                Capacity  -> catch (callback_mod()):request_complete(
-                                     Op, RequestStart, Capacity)
+                undefined ->
+                    ok;
+                Capacity  ->
+                    catch (config_callback_mod()):request_complete(
+                            Op, RequestStart, Capacity)
             end,
-
             {ok, Response};
-
         {error, Reason} = Error ->
-            catch (callback_mod()):request_error(Op, RequestStart, Reason),
+            catch (config_callback_mod()):request_error(Op, RequestStart, Reason),
 
             case should_retry(Reason) of
-                true ->
-                    case Retries =:= retries(Opts) of
-                        true ->
-                            {error, max_retries};
-                        false ->
-                            BackoffTime = min(max_backoff(Opts),
-                                              trunc(math:pow(2, Retries) * 50)),
-                            timer:sleep(BackoffTime),
-                            retry(Op, Body, Retries+1, Start, Opts)
-                    end;
-                false ->
-                    Error
+                true  -> apply_backpressure(Op, Body, Retries, Start, Opts);
+                false -> Error
             end
     end.
-
 
 do(Operation, Body, Opts) ->
     Now = edatetime:now2ts(),
 
-    URL = <<"http://", (endpoint())/binary, "/">>,
-    Headers = [
-               {<<"Host">>, endpoint()},
+    URL = <<"http://", (config_endpoint())/binary, "/">>,
+    Headers = [{<<"Host">>,         config_endpoint()},
                {<<"Content-Type">>, <<"application/x-amz-json-1.0">>},
-               {<<"x-amz-date">>, edatetime:iso8601(Now)},
+               {<<"x-amz-date">>,   edatetime:iso8601(Now)},
                {<<"x-amz-target">>, target(Operation)}
               ],
     Signed = [{<<"Authorization">>, authorization(Headers, Body, Now)}
               | Headers],
 
-    ServerTimeout = proplists:get_value(server_timeout, Opts, 5000),
-    CallTimeout = proplists:get_value(call_timeout, Opts, 10000),
-    ClaimTimeout = proplists:get_value(claim_timeout, Opts, 1000), %% us
-    PartySocket = proplists:get_value(party_socket, Opts),
-
-    case party:post(URL, Signed, Body, [{server_timeout, ServerTimeout},
-                                        {call_timeout, CallTimeout},
-                                        {claim_timeout, ClaimTimeout},
-                                        {party_socket, PartySocket}]) of
+    case current_http_client:post(URL, Signed, Body, Opts) of
         {ok, {{200, _}, _, ResponseBody}} ->
             {ok, jiffy:decode(ResponseBody)};
 
@@ -486,10 +445,16 @@ do(Operation, Body, Opts) ->
             {error, Reason}
     end.
 
-
-timeout(Opts)     -> proplists:get_value(timeout, Opts, 5000).
-retries(Opts)     -> proplists:get_value(retries, Opts, 3).
-max_backoff(Opts) -> proplists:get_value(max_backoff, Opts, 60000).
+apply_backpressure(Op, Body, Retries, Start, Opts) ->
+    case Retries =:= opts_retries(Opts) of
+        true ->
+            {error, max_retries};
+        false ->
+            BackoffTime = min(opts_max_backoff(Opts),
+                              trunc(math:pow(2, Retries) * 50)),
+            timer:sleep(BackoffTime),
+            retry(Op, Body, Retries + 1, Start, Opts)
+    end.
 
 
 %%
@@ -530,15 +495,15 @@ canonical(Headers, Body) ->
 string_to_sign(HashedCanonicalRequest, Now) ->
     ["AWS4-HMAC-SHA256", "\n",
      binary_to_list(edatetime:iso8601_basic(Now)), "\n",
-     [ymd(Now), "/", region(), "/", aws_host(), "/aws4_request"], "\n",
-     HashedCanonicalRequest].
+     [format_ymd(Now), "/", config_region(), "/", config_aws_host(),
+      "/aws4_request"], "\n", HashedCanonicalRequest].
 
 
 derived_key(Now) ->
-    Secret = ["AWS4", secret_key()],
-    Date = hmac:hmac256(Secret, ymd(Now)),
-    Region = hmac:hmac256(Date, region()),
-    Service = hmac:hmac256(Region, aws_host()),
+    Secret = ["AWS4", config_secret_key()],
+    Date = hmac:hmac256(Secret, format_ymd(Now)),
+    Region = hmac:hmac256(Date, config_region()),
+    Service = hmac:hmac256(Region, config_aws_host()),
     hmac:hmac256(Service, "aws4_request").
 
 
@@ -548,15 +513,9 @@ signature(StringToSign, Now) ->
         hmac:hmac256(derived_key(Now),
                      StringToSign))).
 
-
-
 credential(Now) ->
-    [access_key(), "/", ymd(Now), "/", region(), "/", aws_host(), "/aws4_request"].
-
-hexdigest(Body) ->
-    to_lower(hmac:hexlify(erlsha2:sha256(Body))).
-
-
+    [config_access_key(), "/", format_ymd(Now), "/", config_region(), "/",
+     config_aws_host(), "/aws4_request"].
 
 target(batch_get_item)   -> <<"DynamoDB_20120810.BatchGetItem">>;
 target(batch_write_item) -> <<"DynamoDB_20120810.BatchWriteItem">>;
@@ -597,11 +556,6 @@ should_retry(max_concurrency)                                   -> true.
 %% INTERNAL HELPERS
 %%
 
-to_lower(Binary) when is_binary(Binary) ->
-    string:to_lower(binary_to_list(Binary));
-to_lower(List) ->
-    string:to_lower(List).
-
 encode_body(Operation, {UserRequest}) ->
     Request = case Operation of
                   Op when Op =:= delete_table;
@@ -615,32 +569,47 @@ encode_body(Operation, {UserRequest}) ->
               end,
     jiffy:encode(Request).
 
-region() ->
+%% Configuration
+config_region() ->
     {ok, Region} = application:get_env(current, region),
     Region.
 
-endpoint() ->
+config_endpoint() ->
     case application:get_env(current, endpoint) of
         {ok, Endpoint} ->
             Endpoint;
         undefined ->
-            <<"dynamodb.", (region())/binary, ".amazonaws.com">>
+            <<"dynamodb.", (config_region())/binary, ".amazonaws.com">>
     end.
 
-aws_host() ->
+config_aws_host() ->
     application:get_env(current, aws_host, <<"dynamodb">>).
 
-access_key() ->
+config_access_key() ->
     {ok, Access} = application:get_env(current, access_key),
     Access.
 
-secret_key() ->
+config_secret_key() ->
     {ok, Secret} = application:get_env(current, secret_access_key),
     Secret.
 
-ymd(Now) ->
+config_callback_mod() ->
+    application:get_env(current, callback_mod, current_callback).
+
+%% Options
+opts_timeout(Opts)     -> proplists:get_value(timeout, Opts, 5000).
+opts_retries(Opts)     -> proplists:get_value(retries, Opts, 3).
+opts_max_backoff(Opts) -> proplists:get_value(max_backoff, Opts, 60000).
+
+%% Formatting helpers
+hexdigest(Body) ->
+    to_lower(hmac:hexlify(erlsha2:sha256(Body))).
+
+format_ymd(Now) ->
     {Y, M, D} = edatetime:ts2date(Now),
     io_lib:format("~4.10.0B~2.10.0B~2.10.0B", [Y, M, D]).
 
-callback_mod() ->
-    application:get_env(current, callback_mod, current_callback).
+to_lower(Binary) when is_binary(Binary) ->
+    string:to_lower(binary_to_list(Binary));
+to_lower(List) ->
+    string:to_lower(List).
