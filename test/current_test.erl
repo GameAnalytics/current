@@ -24,7 +24,8 @@ current_test_() ->
       {timeout, 30,  ?_test(retry_with_timeout())},
       {timeout, 30,  ?_test(timeout())},
       {timeout, 30,  ?_test(throttled())},
-      {timeout, 30,  ?_test(non_json_error())}
+      {timeout, 30,  ?_test(non_json_error())},
+      {timeout, 30,  ?_test(http_client())}
      ]}.
 
 
@@ -104,8 +105,8 @@ batch_get_unprocessed_items() ->
     meck:new(current_http_client, [passthrough]),
     meck:expect(current_http_client, post, 4,
                 meck:seq([fun (URL, Headers, Body, Opts) ->
-                                  {ok, {{200, <<"OK">>}, ResponseHeaders, ResponseBody}} =
-                                       meck:passthrough([URL, Headers, Body, Opts]),
+                                  {ok, {{200, _}, ResponseHeaders, ResponseBody}} =
+                                      meck:passthrough([URL, Headers, Body, Opts]),
                                   {Result} = jiffy:decode(ResponseBody),
                                   ?assertEqual(
                                      {[]}, proplists:get_value(<<"UnprocessedKeys">>, Result)),
@@ -359,9 +360,8 @@ get_put_update_delete() ->
 retry_with_timeout() ->
     meck:new(current_http_client, [passthrough]),
     meck:expect(current_http_client, post, fun (_, _, _, _) ->
-                                            ?debugFmt("called", []),
-                                            {error, claim_timeout}
-                                 end),
+                                                   {error, claim_timeout}
+                                           end),
     ?assertEqual({error, max_retries},
                  current:describe_table({[{<<"TableName">>, ?TABLE}]},
                                         [{retries, 3}])),
@@ -466,6 +466,18 @@ post_vanilla_test() ->
                  iolist_to_binary(
                    current:authorization(Headers, "", Now))).
 
+http_client() ->
+    ?assertEqual(ok, application:set_env(current, http_client, party)),
+    current:delete_table({[{<<"TableName">>, ?TABLE}]}),
+    ?assertNotEqual({ok, lhttpc}, application:get_env(current, http_client)),
+    ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
+
+    ?assertEqual(ok, application:set_env(current, http_client, lhttpc)),
+    current:delete_table({[{<<"TableName">>, ?TABLE}]}),
+    ?assertNotEqual({ok, party}, application:get_env(current, http_client)),
+    ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
+
+    ok.
 
 
 %%
