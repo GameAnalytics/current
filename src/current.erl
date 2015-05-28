@@ -64,10 +64,10 @@
 
 -export_type([target/0, request/0]).
 
+
 %%
 %% LOW-LEVEL API
 %%
-
 
 batch_get_item(Request)              -> do_batch_get_item(Request, []).
 batch_get_item(Request, Opts)        -> do_batch_get_item(Request, Opts).
