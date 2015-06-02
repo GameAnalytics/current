@@ -596,9 +596,9 @@ config_secret_key() ->
 config_callback_mod() ->
     application:get_env(current, callback_mod, current_callback).
 
-%% Options
-opts_timeout(Opts)     -> proplists:get_value(timeout, Opts, 5000).
-opts_retries(Opts)     -> proplists:get_value(retries, Opts, 3).
+%% Query Options
+opts_timeout(Opts)     -> proplists:get_value(timeout,     Opts, 5000).
+opts_retries(Opts)     -> proplists:get_value(retries,     Opts, 3).
 opts_max_backoff(Opts) -> proplists:get_value(max_backoff, Opts, 60000).
 
 %% Formatting helpers

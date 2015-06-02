@@ -18,7 +18,6 @@
 %%
 %% API
 %%
-%%FIXME: unify retry config
 %%TODO: how to handle that party:connect abstraction leak?
 -spec post(binary(), headers(), body(), options()) ->
                   response_ok() | response_error().
@@ -38,8 +37,7 @@ post(URL, Headers, Body, Opts) ->
             party:post(URL, Headers, Body, Options);
         false ->
             Options = [{connect_timeout, CallTimeout},
-                       {max_connections, MaxConns},
-                       {send_retry,      3}],
+                       {max_connections, MaxConns}],
             lhttpc:request(to_list(URL), post,
                            normalize_headers(Headers), Body,
                            CallTimeout, Options)
