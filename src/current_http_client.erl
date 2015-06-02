@@ -3,6 +3,7 @@
 
 %% API
 -export([post/4]).
+-export([is_party_active/0]).
 
 %%
 %% TYPES
@@ -28,7 +29,7 @@ post(URL, Headers, Body, Opts) ->
     PartySocket   = proplists:get_value(party_socket,    Opts, undefined),
     MaxConns      = proplists:get_value(max_connections, Opts, 10),
 
-    case config_http_client() =:= party of
+    case is_party_active() of
         true  ->
             Options = [{server_timeout, ServerTimeout},
                        {call_timeout,   CallTimeout},
@@ -43,6 +44,13 @@ post(URL, Headers, Body, Opts) ->
                            CallTimeout, Options)
     end.
 
+is_party_active() ->
+    application:get_env(current, http_client, lhttpc) =:= party.
+
+
+%%
+%% INTERNALS
+%%
 normalize_headers(Headers) ->
     [{to_list(K), to_list(V)} || {K,V} <- Headers].
 
@@ -50,6 +58,3 @@ to_list(B) when is_binary(B) ->
     binary_to_list(B);
 to_list(L) ->
     L.
-
-config_http_client() ->
-    application:get_env(current, http_client, lhttpc).

@@ -25,7 +25,8 @@ current_test_() ->
       {timeout, 30,  ?_test(timeout())},
       {timeout, 30,  ?_test(throttled())},
       {timeout, 30,  ?_test(non_json_error())},
-      {timeout, 30,  ?_test(http_client())}
+      {timeout, 30,  ?_test(http_client())},
+      {timeout, 30,  ?_test(raw_socket())}
      ]}.
 
 
@@ -479,6 +480,17 @@ http_client() ->
 
     ok.
 
+raw_socket() ->
+    ?assertEqual(ok, application:set_env(current, http_client, lhttpc)),
+    ?assertEqual({error,raw_socket_not_supported},
+                 current:open_socket(?ENDPOINT, raw)),
+
+    ?assertEqual(ok, application:set_env(current, http_client, party)),
+    {Reply, Socket} = current:open_socket(?ENDPOINT, raw),
+    ?assertEqual(ok, Reply),
+    ?assertEqual(ok, current:close_socket(Socket, raw)),
+
+    ok.
 
 %%
 %% HELPERS

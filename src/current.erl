@@ -2,8 +2,7 @@
 -module(current).
 
 %% DynamoDB API
--export([
-         batch_get_item/1,
+-export([batch_get_item/1,
          batch_get_item/2,
          batch_write_item/1,
          batch_write_item/2,
@@ -33,7 +32,7 @@
          update_table/2
         ]).
 
-
+-export([open_socket/2, close_socket/2]).
 -export([wait_for_delete/2, wait_for_active/2]).
 
 
@@ -98,6 +97,31 @@ update_item(Request, Opts)           -> retry(update_item, Request, Opts).
 update_table(Request)                -> retry(update_table, Request, []).
 update_table(Request, Opts)          -> retry(update_table, Request, Opts).
 
+
+
+%%
+%% PARTY RAW SOCKET WRAPPERS
+%%
+
+-spec open_socket(any(), atom()) -> {ok, pid()} | {error, atom()}.
+open_socket(undefined, _Type) ->
+    {error, missing_endpoint};
+open_socket(Endpoint, raw) ->
+    case current_http_client:is_party_active() of
+        true  -> party_socket_raw:start_link(Endpoint);
+        false -> {error, raw_socket_not_supported}
+    end;
+open_socket(Endpoint, _Plain) ->
+    case current_http_client:is_party_active() of
+        true  -> party_socket:start_link(Endpoint);
+        false -> {error, socket_not_supported}
+    end.
+
+-spec close_socket(pid(), atom()) -> ok.
+close_socket(Socket, raw) ->
+    party_socket_raw:stop(Socket);
+close_socket(_Socket, _Plain) ->
+    ok.
 
 
 %%
