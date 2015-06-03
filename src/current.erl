@@ -32,6 +32,7 @@
          update_table/2
         ]).
 
+-export([connect/2, disconnect/1]).
 -export([open_socket/2, close_socket/2]).
 -export([wait_for_delete/2, wait_for_active/2]).
 
@@ -103,6 +104,25 @@ update_table(Request, Opts)          -> retry(update_table, Request, Opts).
 %% PARTY RAW SOCKET WRAPPERS
 %%
 
+-spec connect(iolist(), pos_integer()) -> ok.
+connect(Endpoint, ConnLimit) ->
+    case current_http_client:is_party_active() of
+        true ->
+            ok = party:connect(Endpoint, ConnLimit);
+        false ->
+            ok
+    end.
+
+-spec disconnect(iolist()) -> ok.
+disconnect(Endpoint) ->
+    case current_http_client:is_party_active() of
+        true ->
+            ok = party:disconnect(Endpoint);
+        false ->
+            ok
+    end.
+
+%%TODO: what about prefix it with party_ to make function obvious
 -spec open_socket(any(), atom()) -> {ok, pid()} | {error, atom()}.
 open_socket(undefined, _Type) ->
     {error, missing_endpoint};

@@ -15,18 +15,18 @@
 current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
-      {timeout, 120, ?_test(table_manipulation())},
-      {timeout, 30,  ?_test(batch_get_write_item())},
-      {timeout, 30,  ?_test(batch_get_unprocessed_items())},
-      {timeout, 30,  ?_test(scan())},
-      {timeout, 30,  ?_test(q())},
-      {timeout, 30,  ?_test(get_put_update_delete())},
-      {timeout, 30,  ?_test(retry_with_timeout())},
-      {timeout, 30,  ?_test(timeout())},
-      {timeout, 30,  ?_test(throttled())},
-      {timeout, 30,  ?_test(non_json_error())},
-      {timeout, 30,  ?_test(http_client())},
-      {timeout, 30,  ?_test(raw_socket())}
+      %% {timeout, 120, ?_test(table_manipulation())},
+      %% {timeout, 30,  ?_test(batch_get_write_item())},
+      %% {timeout, 30,  ?_test(batch_get_unprocessed_items())},
+      %% {timeout, 30,  ?_test(scan())},
+      %% {timeout, 30,  ?_test(q())},
+      %% {timeout, 30,  ?_test(get_put_update_delete())},
+      %% {timeout, 30,  ?_test(retry_with_timeout())},
+      %% {timeout, 30,  ?_test(timeout())},
+      %% {timeout, 30,  ?_test(throttled())},
+      %% {timeout, 30,  ?_test(non_json_error())},
+      {timeout, 30,  ?_test(http_client())}
+      %% {timeout, 30,  ?_test(raw_socket())}
      ]}.
 
 
@@ -492,6 +492,7 @@ raw_socket() ->
 
     ok.
 
+
 %%
 %% HELPERS
 %%
@@ -543,9 +544,10 @@ setup() ->
     application:set_env(current, access_key, AccessKey),
     application:set_env(current, secret_access_key, SecretAccessKey),
 
-    ok = party:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2),
+    {ok, _} = application:ensure_all_started(current),
 
-    {ok, _} = application:ensure_all_started(current).
+    %%ok = current:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2).
+    ok.
 
 teardown(_) ->
     application:stop(current).
