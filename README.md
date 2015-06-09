@@ -32,7 +32,7 @@ Example usage:
 ```erlang
 1> application:ensure_all_started(current).
 {ok,[party,current]}
-2> party:connect(<<"http://dynamodb.us-east-1.amazonaws.com">>, 2).
+2> current:connect(<<"http://dynamodb.us-east-1.amazonaws.com">>, 2).
 ok
 3> application:set_env(current, region, <<"us-east-1">>).
 ok
@@ -77,6 +77,23 @@ to ```TOTAL``` by default. When DynamoDB returns the
 module. Keep in mind that for batch requests it is a list containing
 capacity for one or more tables.
 
+## Configurable HTTP client
+You can use either [`party`][] or [`lhttpc`][] HTTP client. Both clients
+favor frequent calls to limited number of endpoints.
+
+```erlang
+ok = application:set_env(current, http_client, lhttpc).
+```
+
+Example of party raw sockett:
+```erlang
+ok = application:set_env(current, http_client, party).
+{ok, Socket} = current:open_socket(<<"http://dynamodb.us-east-1.amazonaws.com">>, raw).
+ok = proplists:set_value(current, party_socket, Socket).
+ok = current:close_socket(Socket, raw).
+
+```
+
 
 ## Testing
 
@@ -94,3 +111,5 @@ To run all tests use `rebar eunit`
 [rebar]: https://github.com/rebar/rebar
 [Java JRE]: http://java.com/en/
 [screen]: https://www.gnu.org/software/screen/
+[party]: https://github.com/GameAnalytics/party.git
+[lhttpc]: https://github.com/ferd/lhttpc.git
