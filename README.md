@@ -105,11 +105,9 @@ To run all tests use `rebar eunit`
 
 
 [jiffy]: https://github.com/davisp/jiffy
-[party]: https://github.com/knutin/party
+[party]: https://github.com/GameAnalytics/party
 [lhttpc]: https://github.com/ferd/lhttpc
 [DynamoDB documentation]: http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/Welcome.html
 [rebar]: https://github.com/rebar/rebar
 [Java JRE]: http://java.com/en/
 [screen]: https://www.gnu.org/software/screen/
-[party]: https://github.com/GameAnalytics/party.git
-[lhttpc]: https://github.com/ferd/lhttpc.git
