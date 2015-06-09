@@ -15,18 +15,18 @@
 current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
-      %% {timeout, 120, ?_test(table_manipulation())},
-      %% {timeout, 30,  ?_test(batch_get_write_item())},
-      %% {timeout, 30,  ?_test(batch_get_unprocessed_items())},
-      %% {timeout, 30,  ?_test(scan())},
-      %% {timeout, 30,  ?_test(q())},
-      %% {timeout, 30,  ?_test(get_put_update_delete())},
-      %% {timeout, 30,  ?_test(retry_with_timeout())},
-      %% {timeout, 30,  ?_test(timeout())},
-      %% {timeout, 30,  ?_test(throttled())},
-      %% {timeout, 30,  ?_test(non_json_error())},
-      {timeout, 30,  ?_test(http_client())}
-      %% {timeout, 30,  ?_test(raw_socket())}
+      {timeout, 120, ?_test(table_manipulation())},
+      {timeout, 30,  ?_test(batch_get_write_item())},
+      {timeout, 30,  ?_test(batch_get_unprocessed_items())},
+      {timeout, 30,  ?_test(scan())},
+      {timeout, 30,  ?_test(q())},
+      {timeout, 30,  ?_test(get_put_update_delete())},
+      {timeout, 30,  ?_test(retry_with_timeout())},
+      {timeout, 30,  ?_test(timeout())},
+      {timeout, 30,  ?_test(throttled())},
+      {timeout, 30,  ?_test(non_json_error())},
+      {timeout, 30,  ?_test(http_client())},
+      {timeout, 30,  ?_test(raw_socket())}
      ]}.
 
 
@@ -128,9 +128,6 @@ batch_get_unprocessed_items() ->
 
     {ok, [{?TABLE_OTHER, Table1}, {?TABLE, Table2}]} =
         current:batch_get_item(GetRequest, []),
-
-    file:write_file("/tmp/1.txt", io_lib:format("~p", [key_sort(Keys)]), [write]),
-    file:write_file("/tmp/2.txt", io_lib:format("~p", [key_sort(Table1)]), [write]),
 
     ?assertEqual(key_sort(Keys), key_sort(Table1)),
     ?assertEqual(key_sort(Keys), key_sort(Table2)),
@@ -469,6 +466,7 @@ post_vanilla_test() ->
 
 http_client() ->
     ?assertEqual(ok, application:set_env(current, http_client, party)),
+    ok = connect_party(),
     current:delete_table({[{<<"TableName">>, ?TABLE}]}),
     ?assertNotEqual({ok, lhttpc}, application:get_env(current, http_client)),
     ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
@@ -496,6 +494,9 @@ raw_socket() ->
 %%
 %% HELPERS
 %%
+
+connect_party() ->
+    ok = current:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2).
 
 creq(Name) ->
     {ok, B} = file:read_file(
@@ -546,7 +547,8 @@ setup() ->
 
     {ok, _} = application:ensure_all_started(current),
 
-    %%ok = current:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2).
+    ok = connect_party(),
+
     ok.
 
 teardown(_) ->

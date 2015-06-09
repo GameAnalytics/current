@@ -110,6 +110,7 @@ connect(Endpoint, ConnLimit) ->
         true ->
             ok = party:connect(Endpoint, ConnLimit);
         false ->
+            %%NOTE: lhttpc does not support connect concept
             ok
     end.
 
@@ -122,8 +123,9 @@ disconnect(Endpoint) ->
             ok
     end.
 
-%%TODO: what about prefix it with party_ to make function obvious
--spec open_socket(any(), atom()) -> {ok, pid()} | {error, atom()}.
+%%TODO: what about prefix it with party_ to make function obvious?
+%%TODO: what about setting socket to party_socket
+-spec open_socket(any(), atom()) -> {ok, pid()} | {errorp, atom()}.
 open_socket(undefined, _Type) ->
     {error, missing_endpoint};
 open_socket(Endpoint, raw) ->
