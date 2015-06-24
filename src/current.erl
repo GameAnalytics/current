@@ -359,11 +359,11 @@ do_query({UserRequest}, Acc, Opts) ->
             {error, Reason}
     end.
 
-get_accumulate_fun(true) ->
+get_accumulate_fun(_IsCount = true) ->
     fun (Count, undefined) -> Count;
         (Count, A) -> Count + A
     end;
-get_accumulate_fun(false) ->
+get_accumulate_fun(_IsCount = false) ->
     fun (Items, undefined) -> Items;
         (Items, A) -> Items ++ A
     end.
