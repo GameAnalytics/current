@@ -85,7 +85,7 @@ favor frequent calls to limited number of endpoints.
 ok = application:set_env(current, http_client, lhttpc).
 ```
 
-Example of party raw sockett:
+Example of party raw socket:
 ```erlang
 ok = application:set_env(current, http_client, party).
 {ok, Socket} = current:open_socket(<<"http://dynamodb.us-east-1.amazonaws.com">>, raw).
