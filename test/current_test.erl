@@ -466,7 +466,7 @@ post_vanilla_test() ->
 
 http_client() ->
     ?assertEqual(ok, application:set_env(current, http_client, party)),
-    ok = connect_party(),
+    ok = maybe_connect_party(),
     current:delete_table({[{<<"TableName">>, ?TABLE}]}),
     ?assertNotEqual({ok, lhttpc}, application:get_env(current, http_client)),
     ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
@@ -486,6 +486,10 @@ raw_socket() ->
     ?assertEqual(ok, application:set_env(current, http_client, party)),
     {Reply, Socket} = current:open_socket(?ENDPOINT, raw),
     ?assertEqual(ok, Reply),
+
+    current:delete_table({[{<<"TableName">>, ?TABLE}]}),
+    ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
+
     ?assertEqual(ok, current:close_socket(Socket, raw)),
 
     ok.
@@ -495,8 +499,8 @@ raw_socket() ->
 %% HELPERS
 %%
 
-connect_party() ->
-    ok = current:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2).
+maybe_connect_party() ->
+    current:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2).
 
 creq(Name) ->
     {ok, B} = file:read_file(
@@ -547,7 +551,7 @@ setup() ->
 
     {ok, _} = application:ensure_all_started(current),
 
-    ok = connect_party(),
+    maybe_connect_party(),
 
     ok.
 
