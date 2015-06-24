@@ -104,23 +104,23 @@ update_table(Request, Opts)          -> retry(update_table, Request, Opts).
 %% PARTY RAW SOCKET WRAPPERS
 %%
 
--spec connect(iolist(), pos_integer()) -> ok.
+-spec connect(iolist(), pos_integer()) -> ok | {error, connect_not_supported}.
 connect(Endpoint, ConnLimit) ->
     case current_http_client:is_party_active() of
         true ->
             ok = party:connect(Endpoint, ConnLimit);
         false ->
             %%NOTE: lhttpc does not support connect concept
-            ok
+            {error, connect_not_supported}
     end.
 
--spec disconnect(iolist()) -> ok.
+-spec disconnect(iolist()) -> ok | {error, connect_not_supported}.
 disconnect(Endpoint) ->
     case current_http_client:is_party_active() of
         true ->
             ok = party:disconnect(Endpoint);
         false ->
-            ok
+            {error, connect_not_supported}
     end.
 
 %%TODO: what about prefix it with party_ to make function obvious?
