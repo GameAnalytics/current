@@ -85,22 +85,27 @@ favor frequent calls to limited number of endpoints.
 ok = application:set_env(current, http_client, lhttpc).
 ```
 
-Example using party raw socket:
-
 New [party][] raw socket is created and set automatically:
 ```erlang
 ok = application:set_env(current, http_client, party).
-{ok, Socket} = current:open_socket(<<"http://dynamodb.us-east-1.amazonaws.com">>, party_socket).
+{ok, Socket} = current:open_socket(<<"http://dynamodb.us-east-1.amazonaws.com">>,
+     party_socket).
 ok = current:close_socket(Socket, party_socket).
 
 ```
 
-An exiting [party][] raw socket is passed using options:
+An exiting [party][] raw socket is passed as an option:
 ```erlang
 current:describe_table({[{<<"TableName">>, <<"current_test_table">>}]},
                                            [{party_socket, Socket}]]).
 
 ```
+
+An exiting [party][] raw socket is set using application configuration parameter:
+```erlang
+ok = application:set_env(current, party_socket, Socket).
+```
+
 
 
 ## Testing
