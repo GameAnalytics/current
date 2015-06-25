@@ -89,7 +89,6 @@ Example of party raw socket:
 ```erlang
 ok = application:set_env(current, http_client, party).
 {ok, Socket} = current:open_socket(<<"http://dynamodb.us-east-1.amazonaws.com">>, raw).
-ok = proplists:set_value(current, party_socket, Socket).
 ok = current:close_socket(Socket, raw).
 
 ```
