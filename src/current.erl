@@ -124,18 +124,28 @@ disconnect(Endpoint) ->
     end.
 
 %%TODO: what about prefix it with party_ to make function obvious?
-%%TODO: what about setting socket to party_socket
--spec open_socket(any(), atom()) -> {ok, pid()} | {errorp, atom()}.
+-spec open_socket(any(), atom()) -> {ok, pid()} | {error, atom()}.
 open_socket(undefined, _Type) ->
     {error, missing_endpoint};
 open_socket(Endpoint, raw) ->
     case current_http_client:is_party_active() of
-        true  -> party_socket_raw:start_link(Endpoint);
-        false -> {error, raw_socket_not_supported}
+        true  ->
+            {ok, SocketPid} = party_socket_raw:start_link(Endpoint),
+
+            %% automatically set socket to party_socket
+            ok = application:set_env(current, party_socket, SocketPid),
+            {ok, SocketPid};
+        false ->
+            {error, raw_socket_not_supported}
     end;
 open_socket(Endpoint, _Plain) ->
     case current_http_client:is_party_active() of
-        true  -> party_socket:start_link(Endpoint);
+        true  ->
+            {ok, SocketPid} = party_socket:start_link(Endpoint),
+
+            %% automatically set socket to party_socket
+            ok = application:set_env(current, party_socket, SocketPid),
+            {ok, SocketPid};
         false -> {error, socket_not_supported}
     end.
 
