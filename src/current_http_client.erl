@@ -45,7 +45,7 @@ post(URL, Headers, Body, Opts) ->
     end.
 
 is_party_active() ->
-    application:get_env(current, http_client, lhttpc) =:= party.
+    application:get_env(current, http_client, party) =:= party.
 
 
 %%
