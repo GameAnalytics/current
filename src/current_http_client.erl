@@ -44,6 +44,7 @@ post(URL, Headers, Body, Opts) ->
                            CallTimeout, Options)
     end.
 
+-spec is_party_active() -> boolean().
 is_party_active() ->
     application:get_env(current, http_client, party) =:= party.
 
