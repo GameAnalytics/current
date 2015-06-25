@@ -78,7 +78,7 @@ module. Keep in mind that for batch requests it is a list containing
 capacity for one or more tables.
 
 ## Configurable HTTP client
-You can use either [`party`][] or [`lhttpc`][] HTTP client. Both clients
+You can use either [party][] or [lhttpc][] HTTP client. Both clients
 favor frequent calls to limited number of endpoints.
 
 ```erlang
