@@ -481,16 +481,16 @@ http_client() ->
 raw_socket() ->
     ?assertEqual(ok, application:set_env(current, http_client, lhttpc)),
     ?assertEqual({error,raw_socket_not_supported},
-                 current:open_socket(?ENDPOINT, raw)),
+                 current:open_socket(?ENDPOINT, party_socket)),
 
     ?assertEqual(ok, application:set_env(current, http_client, party)),
-    {Reply, Socket} = current:open_socket(?ENDPOINT, raw),
+    {Reply, Socket} = current:open_socket(?ENDPOINT, party_socket),
     ?assertEqual(ok, Reply),
 
     current:delete_table({[{<<"TableName">>, ?TABLE}]}),
     ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
 
-    ?assertEqual(ok, current:close_socket(Socket, raw)),
+    ?assertEqual(ok, current:close_socket(Socket, party_socket)),
 
     ok.
 

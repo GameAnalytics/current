@@ -127,7 +127,7 @@ disconnect(Endpoint) ->
 -spec open_socket(any(), atom()) -> {ok, pid()} | {error, atom()}.
 open_socket(undefined, _Type) ->
     {error, missing_endpoint};
-open_socket(Endpoint, raw) ->
+open_socket(Endpoint, party_socket) ->
     case current_http_client:is_party_active() of
         true  ->
             {ok, SocketPid} = party_socket_raw:start_link(Endpoint),
@@ -150,7 +150,7 @@ open_socket(Endpoint, _Plain) ->
     end.
 
 -spec close_socket(pid(), atom()) -> ok.
-close_socket(Socket, raw) ->
+close_socket(Socket, party_socket) ->
     party_socket_raw:stop(Socket);
 close_socket(_Socket, _Plain) ->
     ok.
