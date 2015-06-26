@@ -16,15 +16,17 @@ current_test_() ->
     {setup, fun setup/0, fun teardown/1,
      [
       {timeout, 120, ?_test(table_manipulation())},
-      {timeout, 30, ?_test(batch_get_write_item())},
-      {timeout, 30, ?_test(batch_get_unprocessed_items())},
-      {timeout, 30, ?_test(scan())},
-      {timeout, 30, ?_test(q())},
-      {timeout, 30, ?_test(get_put_update_delete())},
-      {timeout, 30, ?_test(retry_with_timeout())},
-      {timeout, 30, ?_test(timeout())},
-      {timeout, 30, ?_test(throttled())},
-      {timeout, 30, ?_test(non_json_error())}
+      {timeout, 30,  ?_test(batch_get_write_item())},
+      {timeout, 30,  ?_test(batch_get_unprocessed_items())},
+      {timeout, 30,  ?_test(scan())},
+      {timeout, 30,  ?_test(q())},
+      {timeout, 30,  ?_test(get_put_update_delete())},
+      {timeout, 30,  ?_test(retry_with_timeout())},
+      {timeout, 30,  ?_test(timeout())},
+      {timeout, 30,  ?_test(throttled())},
+      {timeout, 30,  ?_test(non_json_error())},
+      {timeout, 30,  ?_test(http_client())},
+      {timeout, 30,  ?_test(raw_socket())}
      ]}.
 
 
@@ -76,9 +78,8 @@ batch_get_write_item() ->
     {ok, [{?TABLE_OTHER, Table1}, {?TABLE, Table2}]} =
         current:batch_get_item(GetRequest),
 
-    ?assertEqual(lists:sort(Keys), lists:sort(Table1)),
-    ?assertEqual(lists:sort(Keys), lists:sort(Table2)).
-
+    ?assertEqual(key_sort(Keys), key_sort(Table1)),
+    ?assertEqual(key_sort(Keys), key_sort(Table2)).
 
 batch_get_unprocessed_items() ->
     ok = create_table(?TABLE),
@@ -102,11 +103,11 @@ batch_get_unprocessed_items() ->
     UnprocessedKeys = {[{?TABLE, {[{<<"Keys">>, Keys2}]}},
                         {?TABLE_OTHER, {[{<<"Keys">>, Keys2}]}}
                        ]},
-    meck:new(party, [passthrough]),
-    meck:expect(party, post, 4,
+    meck:new(current_http_client, [passthrough]),
+    meck:expect(current_http_client, post, 4,
                 meck:seq([fun (URL, Headers, Body, Opts) ->
-                                  {ok, {{200, <<"OK">>}, ResponseHeaders, ResponseBody}} =
-                                       meck:passthrough([URL, Headers, Body, Opts]),
+                                  {ok, {{200, _}, ResponseHeaders, ResponseBody}} =
+                                      meck:passthrough([URL, Headers, Body, Opts]),
                                   {Result} = jiffy:decode(ResponseBody),
                                   ?assertEqual(
                                      {[]}, proplists:get_value(<<"UnprocessedKeys">>, Result)),
@@ -128,11 +129,10 @@ batch_get_unprocessed_items() ->
     {ok, [{?TABLE_OTHER, Table1}, {?TABLE, Table2}]} =
         current:batch_get_item(GetRequest, []),
 
-    ?assertEqual(lists:sort(Keys), lists:sort(Table1)),
-    ?assertEqual(lists:sort(Keys), lists:sort(Table2)),
+    ?assertEqual(key_sort(Keys), key_sort(Table1)),
+    ?assertEqual(key_sort(Keys), key_sort(Table2)),
 
-    ?assert(meck:validate(party)),
-    ok = meck:unload(party).
+    meck:unload(current_http_client).
 
 
 scan() ->
@@ -257,7 +257,7 @@ q() ->
 
     {ok, ResultItems} = current:q(Q, []),
 
-    ?assertEqual(lists:sort(Items), lists:sort(ResultItems)),
+    ?assertEqual(key_sort(Items), key_sort(ResultItems)),
 
     %% Count
     CountQ = {[{<<"TableName">>, ?TABLE},
@@ -356,16 +356,15 @@ get_put_update_delete() ->
 
 
 retry_with_timeout() ->
-    meck:new(party, [passthrough]),
-    meck:expect(party, post, fun (_, _, _, _) ->
-                                         {error, claim_timeout}
-                                 end),
-
+    meck:new(current_http_client, [passthrough]),
+    meck:expect(current_http_client, post, fun (_, _, _, _) ->
+                                                   {error, claim_timeout}
+                                           end),
     ?assertEqual({error, max_retries},
                  current:describe_table({[{<<"TableName">>, ?TABLE}]},
                                         [{retries, 3}])),
 
-    meck:unload(party).
+    meck:unload(current_http_client).
 
 timeout() ->
     ?assertEqual({error, max_retries},
@@ -385,8 +384,8 @@ throttled() ->
                                 {[{'__type',  E},
                                   {message, <<"foobar">>}]})}},
 
-    meck:new(party, [passthrough]),
-    meck:expect(party, post, 4,
+    meck:new(current_http_client, [passthrough]),
+    meck:expect(current_http_client, post, 4,
                 meck_ret_spec:seq(
                   [ThrottledResponse,
                    ThrottledResponse,
@@ -404,12 +403,12 @@ throttled() ->
 
     ?assertEqual(ok, current:batch_write_item(WriteRequest, [{retries, 3}])),
 
-    meck:unload(party).
+    meck:unload(current_http_client).
 
 non_json_error() ->
-    meck:new(party, [passthrough]),
-    PartyResponse = {ok, {{413, ""}, [], <<"not a json response!">>}},
-    meck:expect(party, post, 4, PartyResponse),
+    meck:new(current_http_client, [passthrough]),
+    CurrentResponse = {ok, {{413, ""}, [], <<"not a json response!">>}},
+    meck:expect(current_http_client, post, 4, CurrentResponse),
 
     Key = {[{<<"hash_key">>, ?NUMBER(1)},
             {<<"range_key">>, ?NUMBER(1)}]},
@@ -419,7 +418,7 @@ non_json_error() ->
     ?assertEqual({error, {413, <<"not a json response!">>}},
                  Response),
 
-    meck:unload(party).
+    meck:unload(current_http_client).
 
 
 
@@ -465,11 +464,43 @@ post_vanilla_test() ->
                  iolist_to_binary(
                    current:authorization(Headers, "", Now))).
 
+http_client() ->
+    ?assertEqual(ok, application:set_env(current, http_client, party)),
+    ok = maybe_connect_party(),
+    current:delete_table({[{<<"TableName">>, ?TABLE}]}),
+    ?assertNotEqual({ok, lhttpc}, application:get_env(current, http_client)),
+    ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
+
+    ?assertEqual(ok, application:set_env(current, http_client, lhttpc)),
+    current:delete_table({[{<<"TableName">>, ?TABLE}]}),
+    ?assertNotEqual({ok, party}, application:get_env(current, http_client)),
+    ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
+
+    ok.
+
+raw_socket() ->
+    ?assertEqual(ok, application:set_env(current, http_client, lhttpc)),
+    ?assertEqual({error,raw_socket_not_supported},
+                 current:open_socket(?ENDPOINT, party_socket)),
+
+    ?assertEqual(ok, application:set_env(current, http_client, party)),
+    {Reply, Socket} = current:open_socket(?ENDPOINT, party_socket),
+    ?assertEqual(ok, Reply),
+
+    current:delete_table({[{<<"TableName">>, ?TABLE}]}),
+    ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
+
+    ?assertEqual(ok, current:close_socket(Socket, party_socket)),
+
+    ok.
 
 
 %%
 %% HELPERS
 %%
+
+maybe_connect_party() ->
+    current:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2).
 
 creq(Name) ->
     {ok, B} = file:read_file(
@@ -487,11 +518,18 @@ authz(Name) ->
                 filename:join(["../test", "aws4_testsuite", Name ++ ".authz"])),
     binary:replace(B, <<"\r\n">>, <<"\n">>, [global]).
 
+key_sort(L) ->
+    lists:sort(normalize_key_order(L, [])).
 
-
+normalize_key_order([], Acc) ->
+    lists:reverse(Acc);
+normalize_key_order([{H} | T], Acc) ->
+    K1 = proplists:get_value(<<"hash_key">>, H),
+    K2 = proplists:get_value(<<"range_key">>, H),
+    normalize_key_order(T, [{[{<<"hash_key">>, K1}, {<<"range_key">>, K2}]} | Acc]).
 
 setup() ->
-    {ok, _} = application:ensure_all_started(party),
+    {ok, _} = application:ensure_all_started(current),
 
     %% Make travis-ci use different env/config we do not need valid
     %% credentials for CI since we are using local DynamDB
@@ -511,9 +549,11 @@ setup() ->
     application:set_env(current, access_key, AccessKey),
     application:set_env(current, secret_access_key, SecretAccessKey),
 
-    ok = party:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2),
+    {ok, _} = application:ensure_all_started(current),
 
-    {ok, _} = application:ensure_all_started(current).
+    maybe_connect_party(),
+
+    ok.
 
 teardown(_) ->
     application:stop(current).

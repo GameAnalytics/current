@@ -32,7 +32,7 @@ Example usage:
 ```erlang
 1> application:ensure_all_started(current).
 {ok,[party,current]}
-2> party:connect(<<"http://dynamodb.us-east-1.amazonaws.com">>, 2).
+2> current:connect(<<"http://dynamodb.us-east-1.amazonaws.com">>, 2).
 ok
 3> application:set_env(current, region, <<"us-east-1">>).
 ok
@@ -77,6 +77,36 @@ to ```TOTAL``` by default. When DynamoDB returns the
 module. Keep in mind that for batch requests it is a list containing
 capacity for one or more tables.
 
+## Configurable HTTP client
+You can use either [party][] or [lhttpc][] HTTP client. Both clients
+favor frequent calls to limited number of endpoints.
+
+```erlang
+ok = application:set_env(current, http_client, lhttpc).
+```
+
+New [party][] raw socket is created and set automatically:
+```erlang
+ok = application:set_env(current, http_client, party).
+{ok, Socket} = current:open_socket(<<"http://dynamodb.us-east-1.amazonaws.com">>,
+     party_socket).
+ok = current:close_socket(Socket, party_socket).
+
+```
+
+An exiting [party][] raw socket is passed as an option:
+```erlang
+current:describe_table({[{<<"TableName">>, <<"current_test_table">>}]},
+                                           [{party_socket, Socket}]]).
+
+```
+
+An exiting [party][] raw socket is set using application configuration parameter:
+```erlang
+ok = application:set_env(current, party_socket, Socket).
+```
+
+
 
 ## Testing
 
@@ -88,7 +118,7 @@ To run all tests use `rebar eunit`
 
 
 [jiffy]: https://github.com/davisp/jiffy
-[party]: https://github.com/knutin/party
+[party]: https://github.com/GameAnalytics/party
 [lhttpc]: https://github.com/ferd/lhttpc
 [DynamoDB documentation]: http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/Welcome.html
 [rebar]: https://github.com/rebar/rebar

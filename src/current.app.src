@@ -7,6 +7,7 @@
                   kernel,
                   stdlib,
                   party,
+                  lhttpc,
                   jiffy,
                   edatetime,
                   erlsha2
