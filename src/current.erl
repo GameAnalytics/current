@@ -616,6 +616,7 @@ encode_body(Operation, {UserRequest}) ->
     Request = case Operation of
                   Op when Op =:= delete_table;
                           Op =:= describe_table;
+                          Op =:= list_tables;                          
                           Op =:= create_table ->
                       {UserRequest};
                   _Other ->
