@@ -97,7 +97,7 @@ ok = current:close_socket(Socket, party_socket).
 An exiting [party][] raw socket is passed as an option:
 ```erlang
 current:describe_table({[{<<"TableName">>, <<"current_test_table">>}]},
-                                           [{party_socket, Socket}]]).
+                                           [{party_socket, Socket}]).
 
 ```
 
