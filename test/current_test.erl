@@ -367,7 +367,7 @@ retry_with_timeout() ->
     meck:unload(current_http_client).
 
 timeout() ->
-    ?assertEqual({error, max_retries, claim_timeout},
+    ?assertEqual({error, max_retries, timeout},
                  current:describe_table({[{<<"TableName">>, ?TABLE}]},
                                         [{call_timeout, 1}])).
 
