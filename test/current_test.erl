@@ -360,14 +360,14 @@ retry_with_timeout() ->
     meck:expect(current_http_client, post, fun (_, _, _, _) ->
                                                    {error, claim_timeout}
                                            end),
-    ?assertEqual({error, max_retries},
+    ?assertEqual({error, max_retries, claim_timeout},
                  current:describe_table({[{<<"TableName">>, ?TABLE}]},
                                         [{retries, 3}])),
 
     meck:unload(current_http_client).
 
 timeout() ->
-    ?assertEqual({error, max_retries},
+    ?assertEqual({error, max_retries, claim_timeout},
                  current:describe_table({[{<<"TableName">>, ?TABLE}]},
                                         [{call_timeout, 1}])).
 
