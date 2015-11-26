@@ -449,7 +449,7 @@ retry(Op, Body, Retries, Start, Opts) ->
             catch (config_callback_mod()):request_error(Op, RequestStart, Reason),
 
             case should_retry(Reason) of
-                true  -> apply_backpressure(Op, Body, Retries, Start, Opts);
+                true  -> apply_backpressure(Op, Body, Retries, Start, Opts, Reason);
                 false -> Error
             end
     end.
@@ -501,10 +501,10 @@ do(Operation, Body, Opts) ->
             {error, Reason}
     end.
 
-apply_backpressure(Op, Body, Retries, Start, Opts) ->
+apply_backpressure(Op, Body, Retries, Start, Opts, Reason) ->
     case Retries =:= opts_retries(Opts) of
         true ->
-            {error, max_retries};
+            {error, max_retries, Reason};
         false ->
             BackoffTime = min(opts_max_backoff(Opts),
                               trunc(math:pow(2, Retries) * 50)),
