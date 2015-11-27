@@ -7,4 +7,7 @@ test/aws4_testsuite
 *.beam
 dynamodb_local
 .rebar
+
 dynamodb.pid
+dynamodb.out
+dynamodb.err
