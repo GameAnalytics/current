@@ -1,4 +1,4 @@
 #!/bin/bash
-pkill -f DynamoDBLocal
+kill $(cat dynamodb.pid) || true
 echo '==> local dynamo (stopped)'
 exit 0
