@@ -1,7 +1,15 @@
 language: erlang
-otp_release:
-    - R16B02
 sudo: false
+branches:
+  only:
+      - master
+      - /^game-\d+$/
+notifications:
+     email:
+         - backend@gameanalytics.com
+otp_release:
+    - 19.1
+    - R16B03
 addons:
   apt:
     packages:

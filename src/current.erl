@@ -36,10 +36,15 @@
 -export([open_socket/2, close_socket/2]).
 -export([wait_for_delete/2, wait_for_active/2]).
 
-
-%% Exported for testing
--export([take_get_batch/2, take_write_batch/2]).
--export([derived_key/1, canonical/2, string_to_sign/2, authorization/3]).
+-ifdef(TEST).
+-export([take_get_batch/2,
+         take_write_batch/2,
+         derived_key/1,
+         canonical/2,
+         string_to_sign/2,
+         authorization/3,
+         apply_backpressure/6]).
+-endif.
 
 
 %%
@@ -506,7 +511,7 @@ do(Operation, Body, Opts) ->
 apply_backpressure(Op, Body, Retries, Start, Opts, Reason) ->
     case Retries =:= opts_retries(Opts) of
         true ->
-            {error, max_retries, Reason};
+            {error, {max_retries, Reason}};
         false ->
             BackoffTime = min(opts_max_backoff(Opts),
                               trunc(math:pow(2, Retries) * 50)),
