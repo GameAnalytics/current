@@ -26,7 +26,8 @@ current_test_() ->
       {timeout, 30,  ?_test(throttled())},
       {timeout, 30,  ?_test(non_json_error())},
       {timeout, 30,  ?_test(http_client())},
-      {timeout, 30,  ?_test(raw_socket())}
+      {timeout, 30,  ?_test(raw_socket())},
+      {timeout, 30,  ?_test(exp_error_tuple_backpressure())}
      ]}.
 
 
@@ -360,14 +361,14 @@ retry_with_timeout() ->
     meck:expect(current_http_client, post, fun (_, _, _, _) ->
                                                    {error, claim_timeout}
                                            end),
-    ?assertEqual({error, max_retries, claim_timeout},
+    ?assertEqual({error, {max_retries, claim_timeout}},
                  current:describe_table({[{<<"TableName">>, ?TABLE}]},
                                         [{retries, 3}])),
 
     meck:unload(current_http_client).
 
 timeout() ->
-    ?assertEqual({error, max_retries, timeout},
+    ?assertEqual({error, {max_retries, timeout}},
                  current:describe_table({[{<<"TableName">>, ?TABLE}]},
                                         [{call_timeout, 1}])).
 
@@ -494,6 +495,19 @@ raw_socket() ->
 
     ok.
 
+exp_error_tuple_backpressure() ->
+    Reason = timeout,
+    Retries = 3,
+    Opts = [{retries, Retries}],
+
+    ?assertEqual({error, {max_retries, Reason}},
+                 current:apply_backpressure(some_op,
+                                            some_body,
+                                            Retries,
+                                            start,
+                                            Opts,
+                                            Reason)),
+    ok.
 
 %%
 %% HELPERS
