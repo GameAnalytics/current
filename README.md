@@ -114,7 +114,8 @@ If you provide AWS credentials in `priv/aws_credentials.term` (see
 `priv/aws_credentials_term.template`), you can run the test
 suite. Tables will be created under your account.
 
-To run all tests use `rebar eunit`
+To run all tests use `rebar eunit`. You might want to export Travis env variable first to use test AWS credentials: 
+`export TRAVIS=true`.
 
 
 [jiffy]: https://github.com/davisp/jiffy
