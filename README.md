@@ -4,7 +4,7 @@
 
 Current is an Erlang client for Amazons DynamoDB service. It exposes
 the raw JSON API described in the [DynamoDB documentation], taking
-input and giving output in terms compatible with [jiffy][]. Current
+input and giving output in terms compatible with [jiffy][] (to be replaced with jsx). Current
 can also retry requests when appropriate, for example when you're
 throttled due using all your provisioned throughput or using all
 available socket connections to DynamoDB.
