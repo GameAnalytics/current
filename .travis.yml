@@ -1,9 +1,5 @@
 language: erlang
 sudo: false
-branches:
-  only:
-      - master
-      - /^game-\d+$/
 notifications:
      email:
          - backend@gameanalytics.com
