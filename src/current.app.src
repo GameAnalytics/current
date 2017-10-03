@@ -9,8 +9,7 @@
                   party,
                   lhttpc,
                   jiffy,
-                  edatetime,
-                  erlsha2
+                  edatetime
                  ]},
   {mod, { current_app, []}},
   {env, []}
