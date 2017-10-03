@@ -57,8 +57,8 @@ batch_get_write_item() ->
     ok = create_table(?TABLE_OTHER),
     ok = clear_table(?TABLE_OTHER),
 
-    Keys = [{[{<<"range_key">>, ?NUMBER(random:uniform(1000))},
-              {<<"hash_key">>, ?NUMBER(random:uniform(100000))}]}
+    Keys = [{[{<<"range_key">>, ?NUMBER(rand:uniform(1000))},
+              {<<"hash_key">>, ?NUMBER(rand:uniform(100000))}]}
             || _ <- lists:seq(1, 50)],
 
     WriteRequestItems = [{[{<<"PutRequest">>, {[{<<"Item">>, Key}]}}]}
@@ -86,8 +86,8 @@ batch_get_unprocessed_items() ->
     ok = create_table(?TABLE),
     ok = create_table(?TABLE_OTHER),
 
-    Keys = [{[{<<"range_key">>, ?NUMBER(random:uniform(1000))},
-              {<<"hash_key">>, ?NUMBER(random:uniform(100000))}]}
+    Keys = [{[{<<"range_key">>, ?NUMBER(rand:uniform(1000))},
+              {<<"hash_key">>, ?NUMBER(rand:uniform(100000))}]}
             || _ <- lists:seq(1, 150)],
 
     WriteRequestItems = [{[{<<"PutRequest">>, {[{<<"Item">>, Key}]}}]}
@@ -516,18 +516,18 @@ maybe_connect_party() ->
 
 creq(Name) ->
     {ok, B} = file:read_file(
-                filename:join(["../test", "aws4_testsuite", Name ++ ".creq"])),
+                filename:join(["test", "aws4_testsuite", Name ++ ".creq"])),
     binary:replace(B, <<"\r\n">>, <<"\n">>, [global]).
 
 sts(Name) ->
     {ok, B} = file:read_file(
-                filename:join(["../test", "aws4_testsuite", Name ++ ".sts"])),
+                filename:join(["test", "aws4_testsuite", Name ++ ".sts"])),
     binary:replace(B, <<"\r\n">>, <<"\n">>, [global]).
 
 
 authz(Name) ->
     {ok, B} = file:read_file(
-                filename:join(["../test", "aws4_testsuite", Name ++ ".authz"])),
+                filename:join(["test", "aws4_testsuite", Name ++ ".authz"])),
     binary:replace(B, <<"\r\n">>, <<"\n">>, [global]).
 
 key_sort(L) ->

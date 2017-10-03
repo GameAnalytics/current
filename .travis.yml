@@ -1,9 +1,5 @@
 language: erlang
 sudo: false
-branches:
-  only:
-      - master
-      - /^game-\d+$/
 notifications:
      email:
          - backend@gameanalytics.com
@@ -14,4 +10,9 @@ addons:
   apt:
     packages:
       - default-jre
-script: "./rebar compile && ./rebar eunit skip_deps=true"
+env:
+    - GOAL=test
+    # - GOAL=dialyzer % TODO
+    - GOAL=xref
+install: make deps
+script: make ${GOAL}

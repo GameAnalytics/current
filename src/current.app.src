@@ -9,7 +9,8 @@
                   party,
                   lhttpc,
                   jiffy,
-                  edatetime
+                  edatetime,
+                  base16
                  ]},
   {mod, { current_app, []}},
   {env, []}
