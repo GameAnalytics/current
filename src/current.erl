@@ -529,9 +529,7 @@ apply_backpressure(Op, Body, Retries, Start, Opts, Reason) ->
 authorization(Headers, Body, Now) ->
     CanonicalRequest = canonical(Headers, Body),
 
-    HashedCanonicalRequest = to_lower(
-                               hmac:hexlify(
-                                 erlsha2:sha256(CanonicalRequest))),
+    HashedCanonicalRequest = base16:encode(crypto:hash(sha256, CanonicalRequest)),
 
     StringToSign = string_to_sign(HashedCanonicalRequest, Now),
 
@@ -563,18 +561,16 @@ string_to_sign(HashedCanonicalRequest, Now) ->
 
 
 derived_key(Now) ->
-    Secret = ["AWS4", config_secret_key()],
-    Date = hmac:hmac256(Secret, format_ymd(Now)),
-    Region = hmac:hmac256(Date, config_region()),
-    Service = hmac:hmac256(Region, config_aws_host()),
-    hmac:hmac256(Service, "aws4_request").
+    Secret  = ["AWS4", config_secret_key()],
+    Date    = crypto:hmac(sha256, Secret, format_ymd(Now)),
+    Region  = crypto:hmac(sha256, Date, config_region()),
+    Service = crypto:hmac(sha256, Region, config_aws_host()),
+    crypto:hmac(sha256, Service, "aws4_request").
 
 
 signature(StringToSign, Now) ->
-    to_lower(
-      hmac:hexlify(
-        hmac:hmac256(derived_key(Now),
-                     StringToSign))).
+    Key = derived_key(Now),
+    base16:encode(crypto:hmac(sha256, Key, StringToSign)).
 
 credential(Now) ->
     [config_access_key(), "/", format_ymd(Now), "/", config_region(), "/",
@@ -667,7 +663,7 @@ opts_max_backoff(Opts) -> proplists:get_value(max_backoff, Opts, 60000).
 
 %% Formatting helpers
 hexdigest(Body) ->
-    to_lower(hmac:hexlify(erlsha2:sha256(Body))).
+    base16:encode(crypto:hash(sha256, Body)).
 
 format_ymd(Now) ->
     {Y, M, D} = edatetime:ts2date(Now),

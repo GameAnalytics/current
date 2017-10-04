@@ -1,8 +1,6 @@
 priv/aws_credentials.term
 .eunit
 *~
-deps
-ebin
 test/aws4_testsuite
 *.beam
 dynamodb_local
@@ -11,3 +9,6 @@ dynamodb_local
 dynamodb.pid
 dynamodb.out
 dynamodb.err
+
+_build/
+rebar.lock

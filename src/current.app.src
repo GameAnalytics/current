@@ -10,7 +10,7 @@
                   lhttpc,
                   jiffy,
                   edatetime,
-                  erlsha2
+                  base16
                  ]},
   {mod, { current_app, []}},
   {env, []}

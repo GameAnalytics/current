@@ -57,8 +57,8 @@ batch_get_write_item() ->
     ok = create_table(?TABLE_OTHER),
     ok = clear_table(?TABLE_OTHER),
 
-    Keys = [{[{<<"range_key">>, ?NUMBER(random:uniform(1000))},
-              {<<"hash_key">>, ?NUMBER(random:uniform(100000))}]}
+    Keys = [{[{<<"range_key">>, ?NUMBER(rand:uniform(1000))},
+              {<<"hash_key">>, ?NUMBER(rand:uniform(100000))}]}
             || _ <- lists:seq(1, 50)],
 
     WriteRequestItems = [{[{<<"PutRequest">>, {[{<<"Item">>, Key}]}}]}
@@ -86,8 +86,8 @@ batch_get_unprocessed_items() ->
     ok = create_table(?TABLE),
     ok = create_table(?TABLE_OTHER),
 
-    Keys = [{[{<<"range_key">>, ?NUMBER(random:uniform(1000))},
-              {<<"hash_key">>, ?NUMBER(random:uniform(100000))}]}
+    Keys = [{[{<<"range_key">>, ?NUMBER(rand:uniform(1000))},
+              {<<"hash_key">>, ?NUMBER(rand:uniform(100000))}]}
             || _ <- lists:seq(1, 150)],
 
     WriteRequestItems = [{[{<<"PutRequest">>, {[{<<"Item">>, Key}]}}]}
@@ -434,8 +434,8 @@ key_derivation_test() ->
     application:set_env(current, aws_host, <<"iam">>),
     Now = edatetime:datetime2ts({{2012, 2, 15}, {0, 0, 0}}),
 
-    ?assertEqual("f4780e2d9f65fa895f9c67b32ce1baf0b0d8a43505a000a1a9e090d414db404d",
-                 string:to_lower(hmac:hexlify(current:derived_key(Now)))).
+    ?assertEqual(<<"f4780e2d9f65fa895f9c67b32ce1baf0b0d8a43505a000a1a9e090d414db404d">>,
+                 base16:encode(current:derived_key(Now))).
 
 post_vanilla_test() ->
     application:set_env(current, region, <<"us-east-1">>),
@@ -453,9 +453,7 @@ post_vanilla_test() ->
     CanonicalRequest = current:canonical(Headers, ""),
     ?assertEqual(creq("post-vanilla"), iolist_to_binary(CanonicalRequest)),
 
-    HashedCanonicalRequest = string:to_lower(
-                               hmac:hexlify(
-                                 erlsha2:sha256(CanonicalRequest))),
+    HashedCanonicalRequest = base16:encode(crypto:hash(sha256, CanonicalRequest)),
 
     ?assertEqual(sts("post-vanilla"),
                  iolist_to_binary(
@@ -518,18 +516,18 @@ maybe_connect_party() ->
 
 creq(Name) ->
     {ok, B} = file:read_file(
-                filename:join(["../test", "aws4_testsuite", Name ++ ".creq"])),
+                filename:join(["test", "aws4_testsuite", Name ++ ".creq"])),
     binary:replace(B, <<"\r\n">>, <<"\n">>, [global]).
 
 sts(Name) ->
     {ok, B} = file:read_file(
-                filename:join(["../test", "aws4_testsuite", Name ++ ".sts"])),
+                filename:join(["test", "aws4_testsuite", Name ++ ".sts"])),
     binary:replace(B, <<"\r\n">>, <<"\n">>, [global]).
 
 
 authz(Name) ->
     {ok, B} = file:read_file(
-                filename:join(["../test", "aws4_testsuite", Name ++ ".authz"])),
+                filename:join(["test", "aws4_testsuite", Name ++ ".authz"])),
     binary:replace(B, <<"\r\n">>, <<"\n">>, [global]).
 
 key_sort(L) ->
