@@ -1,3 +1,5 @@
+This version uses `alert_logic/lhttpc` which has fixed problem with max download file size limit of 64MB, however, it doesn't support `max_connections` option. Therefore, it is not being propagated to `lhttpc`.
+
 # DynamoDB client for Erlang
 
 [![Build Status](https://travis-ci.org/GameAnalytics/current.svg?branch=master)](https://travis-ci.org/GameAnalytics/current)

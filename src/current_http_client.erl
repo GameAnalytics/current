@@ -27,7 +27,7 @@ post(URL, Headers, Body, Opts) ->
     CallTimeout   = proplists:get_value(call_timeout,    Opts, 10000),
     ClaimTimeout  = proplists:get_value(claim_timeout,   Opts, 1000), %% us
     PartySocket   = proplists:get_value(party_socket,    Opts, undefined),
-    MaxConns      = proplists:get_value(max_connections, Opts, 10),
+    _MaxConns      = proplists:get_value(max_connections, Opts, 10),
 
     case is_party_active() of
         true  ->
@@ -37,8 +37,9 @@ post(URL, Headers, Body, Opts) ->
                        {party_socket,   PartySocket}],
             party:post(URL, Headers, Body, Options);
         false ->
-            Options = [{connect_timeout, CallTimeout},
-                       {max_connections, MaxConns}],
+            %% The alert_logic/lhttpc doesn't support max_connections option.
+            %% TODO - add {max_connections, MaxConns} once supported.
+            Options = [{connect_timeout, CallTimeout}],
             lhttpc:request(to_list(URL), post,
                            normalize_headers(Headers), Body,
                            CallTimeout, Options)
