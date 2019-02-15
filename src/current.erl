@@ -32,8 +32,6 @@
          update_table/2
         ]).
 
--export([connect/2, disconnect/1]).
--export([open_socket/2, close_socket/2]).
 -export([wait_for_delete/2, wait_for_active/2]).
 
 -ifdef(TEST).
@@ -102,26 +100,6 @@ update_item(Request)                 -> retry(update_item, Request, []).
 update_item(Request, Opts)           -> retry(update_item, Request, Opts).
 update_table(Request)                -> retry(update_table, Request, []).
 update_table(Request, Opts)          -> retry(update_table, Request, Opts).
-
-
--spec connect(iolist(), pos_integer()) -> ok | {error, connect_not_supported}.
-connect(_Endpoint, _ConnLimit) ->
-    ok.
-
--spec disconnect(iolist()) -> ok | {error, connect_not_supported}.
-disconnect(_Endpoint) ->
-    ok.
-
--spec open_socket(any(), atom()) -> {ok, pid()} | {error, atom()}.
-open_socket(undefined, _Type) ->
-    {error, missing_endpoint};
-open_socket(_Endpoint, _Plain) ->
-    ok.
-
--spec close_socket(pid(), atom()) -> ok.
-close_socket(_Socket, _Plain) ->
-    ok.
-
 
 %%
 %% HIGH-LEVEL HELPERS

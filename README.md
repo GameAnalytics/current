@@ -27,8 +27,6 @@ Example usage:
 ```erlang
 1> application:ensure_all_started(current).
 {ok,[current]}
-2> current:connect(<<"http://dynamodb.us-east-1.amazonaws.com">>, 2).
-ok
 3> application:set_env(current, region, <<"us-east-1">>).
 ok
 4> application:set_env(current, access_key, <<"foo">>).
