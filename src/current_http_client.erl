@@ -11,7 +11,7 @@
 -type headers()        :: [header()].
 -type body()           :: iolist() | binary().
 -type options()        :: list({atom(), any()}).
--type response_ok()    :: {ok, {{integer(), string()}, headers(), body()}}.
+-type response_ok()    :: {ok, integer(), body()}.
 -type response_error() :: {error, any()}.
 
 
@@ -22,12 +22,14 @@
                   response_ok() | response_error().
 post(URL, Headers, Body, Opts) ->
     CallTimeout   = proplists:get_value(call_timeout,    Opts, 10000),
-    MaxConns      = proplists:get_value(max_connections, Opts, 10),
-    Options = [{connect_timeout, CallTimeout},
-                {max_connections, MaxConns}],
-    lhttpc:request(to_list(URL), post,
-                    normalize_headers(Headers), Body,
-                    CallTimeout, Options).
+    Request = {to_list(URL), normalize_headers(Headers), "", Body},
+    Options = [{body_format, binary}],
+    case httpc:request(post, Request, [{timeout, CallTimeout}], Options) of
+        {ok,{{_,Code,_},_Headers, RetBody}} ->
+            {ok, Code, RetBody};
+        {error, Error} ->
+            {error, Error}
+    end.
 
 %%
 %% INTERNALS

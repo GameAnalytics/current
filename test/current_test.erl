@@ -106,7 +106,7 @@ batch_get_unprocessed_items() ->
     meck:new(current_http_client, [passthrough]),
     meck:expect(current_http_client, post, 4,
                 meck:seq([fun (URL, Headers, Body, Opts) ->
-                                  {ok, {{200, _}, ResponseHeaders, ResponseBody}} =
+                                  {ok, 200, ResponseBody} =
                                       meck:passthrough([URL, Headers, Body, Opts]),
                                   {Result} = jiffy:decode(ResponseBody),
                                   ?assertEqual(
@@ -115,8 +115,8 @@ batch_get_unprocessed_items() ->
                                                  <<"UnprocessedKeys">>, 1,
                                                  Result, {<<"UnprocessedKeys">>,
                                                           UnprocessedKeys}),
-                                  {ok, {{200, <<"OK">>}, ResponseHeaders,
-                                        jiffy:encode({MockResult})}}
+                                  {ok, 200, 
+                                        jiffy:encode({MockResult})}
                           end,
                           meck:passthrough()])),
 
@@ -367,9 +367,9 @@ retry_with_timeout() ->
     meck:unload(current_http_client).
 
 timeout() ->
-    ?assertEqual({error, {max_retries, timeout}},
+    ?assertMatch({error, {max_retries, _}},
                  current:describe_table({[{<<"TableName">>, ?TABLE}]},
-                                        [{call_timeout, 1}])).
+                                        [{call_timeout, 0}])).
 
 
 throttled() ->
@@ -379,10 +379,10 @@ throttled() ->
     E = <<"com.amazonaws.dynamodb.v20120810#"
           "ProvisionedThroughputExceededException">>,
 
-    ThrottledResponse = {ok, {{400, foo}, [],
+    ThrottledResponse = {ok, 400,
                               jiffy:encode(
                                 {[{'__type',  E},
-                                  {message, <<"foobar">>}]})}},
+                                  {message, <<"foobar">>}]})},
 
     meck:new(current_http_client, [passthrough]),
     meck:expect(current_http_client, post, 4,
@@ -407,7 +407,7 @@ throttled() ->
 
 non_json_error() ->
     meck:new(current_http_client, [passthrough]),
-    CurrentResponse = {ok, {{413, ""}, [], <<"not a json response!">>}},
+    CurrentResponse = {ok, 413, <<"not a json response!">>},
     meck:expect(current_http_client, post, 4, CurrentResponse),
 
     Key = {[{<<"hash_key">>, ?NUMBER(1)},
@@ -463,10 +463,8 @@ post_vanilla_test() ->
                    current:authorization(Headers, "", Now))).
 
 http_client() ->
-    ?assertEqual(ok, application:set_env(current, http_client, lhttpc)),
     current:delete_table({[{<<"TableName">>, ?TABLE}]}),
     ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
-
     ok.
 
 exp_error_tuple_backpressure() ->
@@ -537,6 +535,7 @@ setup() ->
     ok.
 
 teardown(_) ->
+    meck:unload(),
     application:stop(current).
 
 

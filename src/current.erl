@@ -412,10 +412,10 @@ do(Operation, Body, Opts) ->
               | Headers],
 
     case current_http_client:post(URL, Signed, Body, Opts) of
-        {ok, {{200, _}, _, ResponseBody}} ->
+        {ok, 200, ResponseBody} ->
             {ok, jiffy:decode(ResponseBody)};
 
-        {ok, {{Code, _}, _, ResponseBody}}
+        {ok, Code, ResponseBody}
           when 400 =< Code andalso Code =< 599 ->
             try
                 {Response} = jiffy:decode(ResponseBody),
@@ -547,7 +547,9 @@ should_retry(claim_timeout)                                     -> true;
 should_retry(connect_timeout)                                   -> true;
 should_retry(busy)                                              -> true;
 should_retry(econnrefused)                                      -> false;
-should_retry(max_concurrency)                                   -> true.
+should_retry(max_concurrency)                                   -> true;
+should_retry(socket_closed_remotely)                            -> true;
+should_retry(_Other)                                            -> false.
 
 
 
