@@ -26,7 +26,6 @@ current_test_() ->
       {timeout, 30,  ?_test(throttled())},
       {timeout, 30,  ?_test(non_json_error())},
       {timeout, 30,  ?_test(http_client())},
-      {timeout, 30,  ?_test(raw_socket())},
       {timeout, 30,  ?_test(exp_error_tuple_backpressure())}
      ]}.
 
@@ -464,32 +463,9 @@ post_vanilla_test() ->
                    current:authorization(Headers, "", Now))).
 
 http_client() ->
-    ?assertEqual(ok, application:set_env(current, http_client, party)),
-    ok = maybe_connect_party(),
-    current:delete_table({[{<<"TableName">>, ?TABLE}]}),
-    ?assertNotEqual({ok, lhttpc}, application:get_env(current, http_client)),
-    ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
-
     ?assertEqual(ok, application:set_env(current, http_client, lhttpc)),
     current:delete_table({[{<<"TableName">>, ?TABLE}]}),
-    ?assertNotEqual({ok, party}, application:get_env(current, http_client)),
     ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
-
-    ok.
-
-raw_socket() ->
-    ?assertEqual(ok, application:set_env(current, http_client, lhttpc)),
-    ?assertEqual({error,raw_socket_not_supported},
-                 current:open_socket(?ENDPOINT, party_socket)),
-
-    ?assertEqual(ok, application:set_env(current, http_client, party)),
-    {Reply, Socket} = current:open_socket(?ENDPOINT, party_socket),
-    ?assertEqual(ok, Reply),
-
-    current:delete_table({[{<<"TableName">>, ?TABLE}]}),
-    ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
-
-    ?assertEqual(ok, current:close_socket(Socket, party_socket)),
 
     ok.
 
@@ -510,9 +486,6 @@ exp_error_tuple_backpressure() ->
 %%
 %% HELPERS
 %%
-
-maybe_connect_party() ->
-    current:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2).
 
 creq(Name) ->
     {ok, B} = file:read_file(
@@ -541,8 +514,6 @@ normalize_key_order([{H} | T], Acc) ->
     normalize_key_order(T, [{[{<<"hash_key">>, K1}, {<<"range_key">>, K2}]} | Acc]).
 
 setup() ->
-    {ok, _} = application:ensure_all_started(current),
-
     %% Make travis-ci use different env/config we do not need valid
     %% credentials for CI since we are using local DynamDB
     Environment = case os:getenv("TRAVIS") of
@@ -562,8 +533,6 @@ setup() ->
     application:set_env(current, secret_access_key, SecretAccessKey),
 
     {ok, _} = application:ensure_all_started(current),
-
-    maybe_connect_party(),
 
     ok.
 
