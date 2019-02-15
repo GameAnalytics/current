@@ -49,11 +49,11 @@
 %% TYPES
 %%
 
--type target() :: [batch_get_item
+-type target() ::    batch_get_item
                    | batch_write_item
                    | create_table
-                   | delete_table
                    | delete_item
+                   | delete_table
                    | describe_table
                    | get_item
                    | list_tables
@@ -61,8 +61,8 @@
                    | 'query'
                    | scan
                    | update_item
-                   | update_table
-                  ].
+                   | update_table.
+
 -type request() :: {[tuple()]}.
 
 -export_type([target/0, request/0]).
@@ -369,7 +369,7 @@ do_scan({UserRequest}, Acc, Opts) ->
 update_query(Request, Key, Value) ->
     lists:keystore(Key, 1, Request, {Key, Value}).
 
--spec retry(target(), request(), [any()]) -> {ok, _} | {error, _}.
+-spec retry(target(),request(),[any()]) -> {'error', _} | {'ok',_}.
 retry(Op, Request, Opts) ->
     Body = encode_body(Op, Request),
     case proplists:is_defined(no_retry, Opts) of
@@ -603,13 +603,13 @@ opts_max_backoff(Opts) -> proplists:get_value(max_backoff, Opts, 60000).
 
 %% Formatting helpers
 hexdigest(Body) ->
-    base16:encode(crypto:hash(sha256, Body)).
+    binary_to_list(base16:encode(crypto:hash(sha256, Body))).
 
 format_ymd(Now) ->
     {Y, M, D} = edatetime:ts2date(Now),
     io_lib:format("~4.10.0B~2.10.0B~2.10.0B", [Y, M, D]).
 
 to_lower(Binary) when is_binary(Binary) ->
-    string:to_lower(binary_to_list(Binary));
+    to_lower(binary_to_list(Binary));
 to_lower(List) ->
     string:to_lower(List).
