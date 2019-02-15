@@ -9,8 +9,8 @@ echo '==> setup local dynamo (pre_hook)'
 
 if ! [ -f "$ddb_local" ]; then
     mkdir -p dynamodb_local
-    wget -nc http://dynamodb-local.s3-website-us-west-2.amazonaws.com/dynamodb_local_latest.zip -O dynamodb_local/dynamodb_local_latest.zip
-    unzip -n dynamodb_local/dynamodb_local_latest.zip -d dynamodb_local
+    wget -q http://dynamodb-local.s3-website-us-west-2.amazonaws.com/dynamodb_local_latest.zip -O dynamodb_local/dynamodb_local_latest.zip
+    unzip -n -q dynamodb_local/dynamodb_local_latest.zip -d dynamodb_local
 fi
 
 if [ -f dynamodb.pid ]; then
