@@ -5,6 +5,8 @@ notifications:
      email:
          - backend@gameanalytics.com
 otp_release:
+    - 19.3
+    - 20.0
     - 21.1
 addons:
   apt:
