@@ -13,11 +13,11 @@ if ! [ -f "$ddb_local" ]; then
     unzip -n -q dynamodb_local/dynamodb_local_latest.zip -d dynamodb_local
 fi
 
-if [ -f dynamodb.pid ]; then
-	kill $(cat dynamodb.pid) || true
+if [ -f dynamodb_local/dynamodb.pid ]; then
+	kill $(cat dynamodb_local/dynamodb.pid) || true
 fi
-nohup java -Djava.library.path=./dynamodb_local/DynamoDBLocal_lib -jar dynamodb_local/DynamoDBLocal.jar -inMemory > dynamodb.out 2> dynamodb.err < /dev/null &
-echo $! > dynamodb.pid
+nohup java -Djava.library.path=./dynamodb_local/DynamoDBLocal_lib -jar dynamodb_local/DynamoDBLocal.jar -inMemory > dynamodb_local/dynamodb.out 2> dynamodb_local/dynamodb.err < /dev/null &
+echo $! > dynamodb_local/dynamodb.pid
 
 while ! nc -z localhost 8000; do
     echo "DynamoDbLocal not started yet, trying again..."
