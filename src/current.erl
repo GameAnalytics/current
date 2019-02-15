@@ -406,7 +406,7 @@ do(Operation, Body, Opts) ->
     Headers = [{<<"Host">>,         config_endpoint()},
                {<<"Content-Type">>, <<"application/x-amz-json-1.0">>},
                {<<"X-Amz-Date">>,   edatetime:iso8601(Now)},
-               {<<"x-Amz-Target">>, target(Operation)}
+               {<<"X-Amz-Target">>, target(Operation)}
               ],
     Signed = [{<<"Authorization">>, authorization(Headers, Body, Now)}
               | Headers],

@@ -22,7 +22,8 @@
                   response_ok() | response_error().
 post(URL, Headers, Body, Opts) ->
     CallTimeout   = proplists:get_value(call_timeout,    Opts, 10000),
-    Request = {to_list(URL), normalize_headers(Headers), "", Body},
+    Headers2 = [{"Content-Length", integer_to_list(erlang:size(Body))} | Headers],
+    Request = {to_list(URL), normalize_headers(Headers2), "", Body},
     Options = [{body_format, binary}, {headers_as_is, true}],
     case httpc:request(post, Request, [{timeout, CallTimeout}], Options) of
         {ok,{{_,Code,_},_Headers, RetBody}} ->
