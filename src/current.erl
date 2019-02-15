@@ -405,8 +405,8 @@ do(Operation, Body, Opts) ->
     URL = <<"http://", (config_endpoint())/binary, "/">>,
     Headers = [{<<"Host">>,         config_endpoint()},
                {<<"Content-Type">>, <<"application/x-amz-json-1.0">>},
-               {<<"x-amz-date">>,   edatetime:iso8601(Now)},
-               {<<"x-amz-target">>, target(Operation)}
+               {<<"X-Amz-Date">>,   edatetime:iso8601(Now)},
+               {<<"x-Amz-Target">>, target(Operation)}
               ],
     Signed = [{<<"Authorization">>, authorization(Headers, Body, Now)}
               | Headers],

@@ -23,7 +23,7 @@
 post(URL, Headers, Body, Opts) ->
     CallTimeout   = proplists:get_value(call_timeout,    Opts, 10000),
     Request = {to_list(URL), normalize_headers(Headers), "", Body},
-    Options = [{body_format, binary}],
+    Options = [{body_format, binary}, {headers_as_is, true}],
     case httpc:request(post, Request, [{timeout, CallTimeout}], Options) of
         {ok,{{_,Code,_},_Headers, RetBody}} ->
             {ok, Code, RetBody};
