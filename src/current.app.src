@@ -6,8 +6,7 @@
   {applications, [
                   kernel,
                   stdlib,
-                  party,
-                  lhttpc,
+                  inets,
                   jiffy,
                   edatetime,
                   base16

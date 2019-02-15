@@ -26,7 +26,6 @@ current_test_() ->
       {timeout, 30,  ?_test(throttled())},
       {timeout, 30,  ?_test(non_json_error())},
       {timeout, 30,  ?_test(http_client())},
-      {timeout, 30,  ?_test(raw_socket())},
       {timeout, 30,  ?_test(exp_error_tuple_backpressure())}
      ]}.
 
@@ -107,7 +106,7 @@ batch_get_unprocessed_items() ->
     meck:new(current_http_client, [passthrough]),
     meck:expect(current_http_client, post, 4,
                 meck:seq([fun (URL, Headers, Body, Opts) ->
-                                  {ok, {{200, _}, ResponseHeaders, ResponseBody}} =
+                                  {ok, 200, ResponseBody} =
                                       meck:passthrough([URL, Headers, Body, Opts]),
                                   {Result} = jiffy:decode(ResponseBody),
                                   ?assertEqual(
@@ -116,8 +115,8 @@ batch_get_unprocessed_items() ->
                                                  <<"UnprocessedKeys">>, 1,
                                                  Result, {<<"UnprocessedKeys">>,
                                                           UnprocessedKeys}),
-                                  {ok, {{200, <<"OK">>}, ResponseHeaders,
-                                        jiffy:encode({MockResult})}}
+                                  {ok, 200, 
+                                        jiffy:encode({MockResult})}
                           end,
                           meck:passthrough()])),
 
@@ -368,9 +367,9 @@ retry_with_timeout() ->
     meck:unload(current_http_client).
 
 timeout() ->
-    ?assertEqual({error, {max_retries, timeout}},
+    ?assertMatch({error, {max_retries, _}},
                  current:describe_table({[{<<"TableName">>, ?TABLE}]},
-                                        [{call_timeout, 1}])).
+                                        [{call_timeout, 0}])).
 
 
 throttled() ->
@@ -380,10 +379,10 @@ throttled() ->
     E = <<"com.amazonaws.dynamodb.v20120810#"
           "ProvisionedThroughputExceededException">>,
 
-    ThrottledResponse = {ok, {{400, foo}, [],
+    ThrottledResponse = {ok, 400,
                               jiffy:encode(
                                 {[{'__type',  E},
-                                  {message, <<"foobar">>}]})}},
+                                  {message, <<"foobar">>}]})},
 
     meck:new(current_http_client, [passthrough]),
     meck:expect(current_http_client, post, 4,
@@ -408,7 +407,7 @@ throttled() ->
 
 non_json_error() ->
     meck:new(current_http_client, [passthrough]),
-    CurrentResponse = {ok, {{413, ""}, [], <<"not a json response!">>}},
+    CurrentResponse = {ok, 413, <<"not a json response!">>},
     meck:expect(current_http_client, post, 4, CurrentResponse),
 
     Key = {[{<<"hash_key">>, ?NUMBER(1)},
@@ -464,33 +463,8 @@ post_vanilla_test() ->
                    current:authorization(Headers, "", Now))).
 
 http_client() ->
-    ?assertEqual(ok, application:set_env(current, http_client, party)),
-    ok = maybe_connect_party(),
-    current:delete_table({[{<<"TableName">>, ?TABLE}]}),
-    ?assertNotEqual({ok, lhttpc}, application:get_env(current, http_client)),
-    ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
-
-    ?assertEqual(ok, application:set_env(current, http_client, lhttpc)),
-    current:delete_table({[{<<"TableName">>, ?TABLE}]}),
-    ?assertNotEqual({ok, party}, application:get_env(current, http_client)),
-    ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
-
-    ok.
-
-raw_socket() ->
-    ?assertEqual(ok, application:set_env(current, http_client, lhttpc)),
-    ?assertEqual({error,raw_socket_not_supported},
-                 current:open_socket(?ENDPOINT, party_socket)),
-
-    ?assertEqual(ok, application:set_env(current, http_client, party)),
-    {Reply, Socket} = current:open_socket(?ENDPOINT, party_socket),
-    ?assertEqual(ok, Reply),
-
     current:delete_table({[{<<"TableName">>, ?TABLE}]}),
     ?assertEqual(ok, current:wait_for_delete(?TABLE, 5000)),
-
-    ?assertEqual(ok, current:close_socket(Socket, party_socket)),
-
     ok.
 
 exp_error_tuple_backpressure() ->
@@ -510,9 +484,6 @@ exp_error_tuple_backpressure() ->
 %%
 %% HELPERS
 %%
-
-maybe_connect_party() ->
-    current:connect(iolist_to_binary(["http://", ?ENDPOINT]), 2).
 
 creq(Name) ->
     {ok, B} = file:read_file(
@@ -541,8 +512,6 @@ normalize_key_order([{H} | T], Acc) ->
     normalize_key_order(T, [{[{<<"hash_key">>, K1}, {<<"range_key">>, K2}]} | Acc]).
 
 setup() ->
-    {ok, _} = application:ensure_all_started(current),
-
     %% Make travis-ci use different env/config we do not need valid
     %% credentials for CI since we are using local DynamDB
     Environment = case os:getenv("TRAVIS") of
@@ -563,11 +532,10 @@ setup() ->
 
     {ok, _} = application:ensure_all_started(current),
 
-    maybe_connect_party(),
-
     ok.
 
 teardown(_) ->
+    meck:unload(),
     application:stop(current).
 
 

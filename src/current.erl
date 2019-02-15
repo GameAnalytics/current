@@ -32,8 +32,6 @@
          update_table/2
         ]).
 
--export([connect/2, disconnect/1]).
--export([open_socket/2, close_socket/2]).
 -export([wait_for_delete/2, wait_for_active/2]).
 
 -ifdef(TEST).
@@ -51,11 +49,11 @@
 %% TYPES
 %%
 
--type target() :: [batch_get_item
+-type target() ::    batch_get_item
                    | batch_write_item
                    | create_table
-                   | delete_table
                    | delete_item
+                   | delete_table
                    | describe_table
                    | get_item
                    | list_tables
@@ -63,8 +61,8 @@
                    | 'query'
                    | scan
                    | update_item
-                   | update_table
-                  ].
+                   | update_table.
+
 -type request() :: {[tuple()]}.
 
 -export_type([target/0, request/0]).
@@ -102,64 +100,6 @@ update_item(Request)                 -> retry(update_item, Request, []).
 update_item(Request, Opts)           -> retry(update_item, Request, Opts).
 update_table(Request)                -> retry(update_table, Request, []).
 update_table(Request, Opts)          -> retry(update_table, Request, Opts).
-
-
-
-%%
-%% PARTY RAW SOCKET WRAPPERS
-%%
-
--spec connect(iolist(), pos_integer()) -> ok | {error, connect_not_supported}.
-connect(Endpoint, ConnLimit) ->
-    case current_http_client:is_party_active() of
-        true ->
-            ok = party:connect(Endpoint, ConnLimit);
-        false ->
-            %%NOTE: lhttpc does not support connect concept
-            {error, connect_not_supported}
-    end.
-
--spec disconnect(iolist()) -> ok | {error, connect_not_supported}.
-disconnect(Endpoint) ->
-    case current_http_client:is_party_active() of
-        true ->
-            ok = party:disconnect(Endpoint);
-        false ->
-            {error, connect_not_supported}
-    end.
-
-%%TODO: what about prefix it with party_ to make function obvious?
--spec open_socket(any(), atom()) -> {ok, pid()} | {error, atom()}.
-open_socket(undefined, _Type) ->
-    {error, missing_endpoint};
-open_socket(Endpoint, party_socket) ->
-    case current_http_client:is_party_active() of
-        true  ->
-            {ok, SocketPid} = party_socket_raw:start_link(Endpoint),
-
-            %% automatically set socket to party_socket
-            ok = application:set_env(current, party_socket, SocketPid),
-            {ok, SocketPid};
-        false ->
-            {error, raw_socket_not_supported}
-    end;
-open_socket(Endpoint, _Plain) ->
-    case current_http_client:is_party_active() of
-        true  ->
-            {ok, SocketPid} = party_socket:start_link(Endpoint),
-
-            %% automatically set socket to party_socket
-            ok = application:set_env(current, party_socket, SocketPid),
-            {ok, SocketPid};
-        false -> {error, socket_not_supported}
-    end.
-
--spec close_socket(pid(), atom()) -> ok.
-close_socket(Socket, party_socket) ->
-    party_socket_raw:stop(Socket);
-close_socket(_Socket, _Plain) ->
-    ok.
-
 
 %%
 %% HIGH-LEVEL HELPERS
@@ -429,7 +369,7 @@ do_scan({UserRequest}, Acc, Opts) ->
 update_query(Request, Key, Value) ->
     lists:keystore(Key, 1, Request, {Key, Value}).
 
--spec retry(target(), request(), [any()]) -> {ok, _} | {error, _}.
+-spec retry(target(),request(),[any()]) -> {'error', _} | {'ok',_}.
 retry(Op, Request, Opts) ->
     Body = encode_body(Op, Request),
     case proplists:is_defined(no_retry, Opts) of
@@ -472,10 +412,10 @@ do(Operation, Body, Opts) ->
               | Headers],
 
     case current_http_client:post(URL, Signed, Body, Opts) of
-        {ok, {{200, _}, _, ResponseBody}} ->
+        {ok, 200, ResponseBody} ->
             {ok, jiffy:decode(ResponseBody)};
 
-        {ok, {{Code, _}, _, ResponseBody}}
+        {ok, Code, ResponseBody}
           when 400 =< Code andalso Code =< 599 ->
             try
                 {Response} = jiffy:decode(ResponseBody),
@@ -588,9 +528,7 @@ target(put_item)         -> <<"DynamoDB_20120810.PutItem">>;
 target('query')          -> <<"DynamoDB_20120810.Query">>;
 target(scan)             -> <<"DynamoDB_20120810.Scan">>;
 target(update_item)      -> <<"DynamoDB_20120810.UpdateItem">>;
-target(update_table)     -> <<"DynamoDB_20120810.UpdateTable">>;
-target(Target)           -> throw({unknown_target, Target}).
-
+target(update_table)     -> <<"DynamoDB_20120810.UpdateTable">>.
 
 should_retry({<<"ProvisionedThroughputExceededException">>, _}) -> true;
 should_retry({<<"ResourceNotFoundException">>, _})              -> false;
@@ -606,8 +544,12 @@ should_retry({Code, _}) when Code >= 500                        -> true;
 should_retry({Code, _}) when Code < 500                         -> false;
 should_retry(timeout)                                           -> true;
 should_retry(claim_timeout)                                     -> true;
+should_retry(connect_timeout)                                   -> true;
 should_retry(busy)                                              -> true;
-should_retry(max_concurrency)                                   -> true.
+should_retry(econnrefused)                                      -> false;
+should_retry(max_concurrency)                                   -> true;
+should_retry(socket_closed_remotely)                            -> true;
+should_retry(_Other)                                            -> false.
 
 
 
@@ -663,13 +605,13 @@ opts_max_backoff(Opts) -> proplists:get_value(max_backoff, Opts, 60000).
 
 %% Formatting helpers
 hexdigest(Body) ->
-    base16:encode(crypto:hash(sha256, Body)).
+    binary_to_list(base16:encode(crypto:hash(sha256, Body))).
 
 format_ymd(Now) ->
     {Y, M, D} = edatetime:ts2date(Now),
     io_lib:format("~4.10.0B~2.10.0B~2.10.0B", [Y, M, D]).
 
 to_lower(Binary) when is_binary(Binary) ->
-    string:to_lower(binary_to_list(Binary));
+    to_lower(binary_to_list(Binary));
 to_lower(List) ->
     string:to_lower(List).

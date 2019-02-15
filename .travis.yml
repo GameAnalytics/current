@@ -1,4 +1,5 @@
 language: erlang
+dist: xenial
 sudo: false
 notifications:
      email:
@@ -6,13 +7,10 @@ notifications:
 otp_release:
     - 19.3
     - 20.0
+    - 21.1
 addons:
   apt:
     packages:
       - default-jre
-env:
-    - GOAL=test
-    # - GOAL=dialyzer % TODO
-    - GOAL=xref
 install: make deps
-script: make ${GOAL}
+script: make xref test dialyzer

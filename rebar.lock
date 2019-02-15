@@ -1,0 +1,12 @@
+{"1.1.0",
+[{<<"base16">>,{pkg,<<"base16">>,<<"1.0.0">>},0},
+ {<<"edatetime">>,
+  {git,"https://github.com/GameAnalytics/edatetime.git",
+       {ref,"02352cd070ae6dc59e6ed3e36dd8a77a50e74249"}},
+  0},
+ {<<"jiffy">>,{pkg,<<"jiffy">>,<<"0.14.11">>},0}]}.
+[
+{pkg_hash,[
+ {<<"base16">>, <<"283644E2B21BD5915ACB7178BED7851FB07C6E5749B8FAD68A53C501092176D9">>},
+ {<<"jiffy">>, <<"919A87D491C5A6B5E3BBC27FAFEDC3A0761CA0B4C405394F121F582FD4E3F0E5">>}]}
+].
