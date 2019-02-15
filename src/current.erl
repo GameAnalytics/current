@@ -550,9 +550,7 @@ target(put_item)         -> <<"DynamoDB_20120810.PutItem">>;
 target('query')          -> <<"DynamoDB_20120810.Query">>;
 target(scan)             -> <<"DynamoDB_20120810.Scan">>;
 target(update_item)      -> <<"DynamoDB_20120810.UpdateItem">>;
-target(update_table)     -> <<"DynamoDB_20120810.UpdateTable">>;
-target(Target)           -> throw({unknown_target, Target}).
-
+target(update_table)     -> <<"DynamoDB_20120810.UpdateTable">>.
 
 should_retry({<<"ProvisionedThroughputExceededException">>, _}) -> true;
 should_retry({<<"ResourceNotFoundException">>, _})              -> false;
