@@ -21,24 +21,12 @@
 -spec post(binary(), headers(), body(), options()) ->
                   response_ok() | response_error().
 post(URL, Headers, Body, Opts) ->
-    CallTimeout   = proplists:get_value(call_timeout,    Opts, 10000),
-    Headers2 = [{"Content-Length", integer_to_list(erlang:iolist_size(Body))} | Headers],
-    Request = {to_list(URL), normalize_headers(Headers2), "", Body},
-    Options = [{body_format, binary}, {headers_as_is, true}],
-    case httpc:request(post, Request, [{timeout, CallTimeout}], Options) of
-        {ok,{{_,Code,_},_Headers, RetBody}} ->
+    CallTimeout   = proplists:get_value(call_timeout, Opts, 10000),
+    Options = [{pool, default}, {recv_timeout, CallTimeout}],
+    case hackney:request(post, URL, Headers, Body, Options) of
+        {ok, Code, _Headers, Ref} ->
+            {ok, RetBody} = hackney:body(Ref),
             {ok, Code, RetBody};
         {error, Error} ->
             {error, Error}
     end.
-
-%%
-%% INTERNALS
-%%
-normalize_headers(Headers) ->
-    [{to_list(K), to_list(V)} || {K,V} <- Headers].
-
-to_list(B) when is_binary(B) ->
-    binary_to_list(B);
-to_list(L) ->
-    L.

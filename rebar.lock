@@ -1,12 +1,28 @@
 {"1.1.0",
 [{<<"base16">>,{pkg,<<"base16">>,<<"1.0.0">>},0},
+ {<<"certifi">>,{pkg,<<"certifi">>,<<"2.5.1">>},1},
  {<<"edatetime">>,
   {git,"https://github.com/GameAnalytics/edatetime.git",
        {ref,"02352cd070ae6dc59e6ed3e36dd8a77a50e74249"}},
   0},
- {<<"jiffy">>,{pkg,<<"jiffy">>,<<"0.14.11">>},0}]}.
+ {<<"hackney">>,{pkg,<<"hackney">>,<<"1.15.1">>},0},
+ {<<"idna">>,{pkg,<<"idna">>,<<"6.0.0">>},1},
+ {<<"jiffy">>,{pkg,<<"jiffy">>,<<"0.14.11">>},0},
+ {<<"metrics">>,{pkg,<<"metrics">>,<<"1.0.1">>},1},
+ {<<"mimerl">>,{pkg,<<"mimerl">>,<<"1.2.0">>},1},
+ {<<"parse_trans">>,{pkg,<<"parse_trans">>,<<"3.3.0">>},2},
+ {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.4">>},1},
+ {<<"unicode_util_compat">>,{pkg,<<"unicode_util_compat">>,<<"0.4.1">>},2}]}.
 [
 {pkg_hash,[
  {<<"base16">>, <<"283644E2B21BD5915ACB7178BED7851FB07C6E5749B8FAD68A53C501092176D9">>},
- {<<"jiffy">>, <<"919A87D491C5A6B5E3BBC27FAFEDC3A0761CA0B4C405394F121F582FD4E3F0E5">>}]}
+ {<<"certifi">>, <<"867CE347F7C7D78563450A18A6A28A8090331E77FA02380B4A21962A65D36EE5">>},
+ {<<"hackney">>, <<"9F8F471C844B8CE395F7B6D8398139E26DDCA9EBC171A8B91342EE15A19963F4">>},
+ {<<"idna">>, <<"689C46CBCDF3524C44D5F3DDE8001F364CD7608A99556D8FBD8239A5798D4C10">>},
+ {<<"jiffy">>, <<"919A87D491C5A6B5E3BBC27FAFEDC3A0761CA0B4C405394F121F582FD4E3F0E5">>},
+ {<<"metrics">>, <<"25F094DEA2CDA98213CECC3AEFF09E940299D950904393B2A29D191C346A8486">>},
+ {<<"mimerl">>, <<"67E2D3F571088D5CFD3E550C383094B47159F3EEE8FFA08E64106CDF5E981BE3">>},
+ {<<"parse_trans">>, <<"09765507A3C7590A784615CFD421D101AEC25098D50B89D7AA1D66646BC571C1">>},
+ {<<"ssl_verify_fun">>, <<"F0EAFFF810D2041E93F915EF59899C923F4568F4585904D010387ED74988E77B">>},
+ {<<"unicode_util_compat">>, <<"D869E4C68901DD9531385BB0C8C40444EBF624E60B6962D95952775CAC5E90CD">>}]}
 ].
