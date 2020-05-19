@@ -413,12 +413,12 @@ do(Operation, Body, Opts) ->
 
     case current_http_client:post(URL, Signed, Body, Opts) of
         {ok, 200, ResponseBody} ->
-            {ok, jiffy:decode(ResponseBody)};
+            {ok, jiffy:decode(ResponseBody, [copy_strings])};
 
         {ok, Code, ResponseBody}
           when 400 =< Code andalso Code =< 599 ->
             try
-                {Response} = jiffy:decode(ResponseBody),
+                {Response} = jiffy:decode(ResponseBody, [copy_strings]),
                 Type = case proplists:get_value(<<"__type">>, Response) of
                            <<"com.amazonaws.dynamodb.v20120810#", T/binary>> ->
                                T;
@@ -438,8 +438,7 @@ do(Operation, Body, Opts) ->
                           end,
                 {error, {Type, Message}}
             catch
-                throw:{error, {Line, Reason}} when is_integer(Line),
-                                                   is_atom(Reason) ->
+                error:{_, invalid_json} ->
                     %% json decoding failed, return raw error response
                     {error, {Code, ResponseBody}}
             end;
