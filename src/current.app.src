@@ -9,7 +9,8 @@
                   inets,
                   jiffy,
                   edatetime,
-                  base16
+                  base16,
+                  hackney
                  ]},
   {mod, { current_app, []}},
   {env, []}
