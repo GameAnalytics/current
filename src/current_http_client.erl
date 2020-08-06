@@ -25,8 +25,12 @@ post(URL, Headers, Body, Opts) ->
     Options = [{pool, default}, {recv_timeout, CallTimeout}],
     case hackney:request(post, URL, Headers, Body, Options) of
         {ok, Code, _Headers, Ref} ->
-            {ok, RetBody} = hackney:body(Ref),
-            {ok, Code, RetBody};
+            case hackney:body(Ref) of
+                {ok, RetBody} ->
+                    {ok, Code, RetBody};
+                {error, Error} ->
+                    {error, Error}
+            end;
         {error, Error} ->
             {error, Error}
     end.
