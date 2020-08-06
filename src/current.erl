@@ -542,6 +542,8 @@ should_retry({<<"ServiceUnavailableException">>, _})            -> true;
 should_retry({Code, _}) when Code >= 500                        -> true;
 should_retry({Code, _}) when Code < 500                         -> false;
 should_retry(timeout)                                           -> true;
+should_retry(closed)                                            -> true;
+should_retry({closed, _})                                       -> true;
 should_retry(claim_timeout)                                     -> true;
 should_retry(connect_timeout)                                   -> true;
 should_retry(busy)                                              -> true;
