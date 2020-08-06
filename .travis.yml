@@ -1,13 +1,13 @@
 language: erlang
-dist: xenial
+dist: bionic
 sudo: false
 notifications:
      email:
          - backend@gameanalytics.com
 otp_release:
-    - 19.3
     - 20.0
     - 21.1
+    - 22.3
 addons:
   apt:
     packages:
