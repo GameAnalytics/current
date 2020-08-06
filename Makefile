@@ -2,7 +2,7 @@
 
 ERL=erl
 
-R3 = ./rebar3
+R3 = rebar3
 
 compile:
 	$(R3) compile
