@@ -438,7 +438,10 @@ do(Operation, Body, Opts) ->
                           end,
                 {error, {Type, Message}}
             catch
-                error:{_, invalid_json} ->
+                error:{_, Err} when Err =:= invalid_json;
+                                    Err =:= invalid_literal;
+                                    Err =:= invalid_string;
+                                    Err =:= invalid_number ->
                     %% json decoding failed, return raw error response
                     {error, {Code, ResponseBody}}
             end;
