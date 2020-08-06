@@ -7,7 +7,6 @@ notifications:
 otp_release:
     - 21.1
     - 22.3
-    - 23.0
 addons:
   apt:
     packages:
