@@ -504,15 +504,15 @@ string_to_sign(HashedCanonicalRequest, Now) ->
 
 derived_key(Now) ->
     Secret  = ["AWS4", config_secret_key()],
-    Date    = crypto:hmac(sha256, Secret, format_ymd(Now)),
-    Region  = crypto:hmac(sha256, Date, config_region()),
-    Service = crypto:hmac(sha256, Region, config_aws_host()),
-    crypto:hmac(sha256, Service, "aws4_request").
+    Date    = crypto:mac(hmac, sha256, Secret, format_ymd(Now)),
+    Region  = crypto:mac(hmac, sha256, Date, config_region()),
+    Service = crypto:mac(hmac, sha256, Region, config_aws_host()),
+    crypto:mac(hmac, sha256, Service, "aws4_request").
 
 
 signature(StringToSign, Now) ->
     Key = derived_key(Now),
-    base16:encode(crypto:hmac(sha256, Key, StringToSign)).
+    base16:encode(crypto:mac(hmac, sha256, Key, StringToSign)).
 
 credential(Now) ->
     [config_access_key(), "/", format_ymd(Now), "/", config_region(), "/",
